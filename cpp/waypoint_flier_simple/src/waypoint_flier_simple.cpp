@@ -50,6 +50,9 @@ private:
   double max_y_;
   double max_z_;
 
+  double time_now = 0.0;
+  double time_initial = 0.0;
+
   /* ROS messages which store the current reference and odometry */
   mrs_msgs::ReferenceStamped ref_;
   nav_msgs::Odometry         current_odom_;
@@ -140,8 +143,20 @@ void WaypointFlierSimple::callbackMainTimer([[maybe_unused]] const ros::TimerEve
   if (!active_) {
 
     ROS_INFO_THROTTLE(1.0, "[WaypointFlierSimple]: Waiting  for activation");
+    
+    time_initial =ros::Time::now().toSec();
+    ROS_INFO_STREAM("[WaypointFlierSimple]: Time: " << time_initial);
+
+    double secs =ros::Time::now().toSec();
+
+    // ros::Duration d(0.5);
+    // secs = d.toSec();
+    ROS_INFO_STREAM("[WaypointFlierSimple]: Time: " << secs);
 
   } else {
+
+    time_now =ros::Time::now().toSec() - time_initial;
+    ROS_INFO_STREAM("Time: " << time_now);
 
     // calculate the distance to the current reference
     double dist_to_ref = distance(ref_, current_odom_);
@@ -157,7 +172,7 @@ void WaypointFlierSimple::callbackMainTimer([[maybe_unused]] const ros::TimerEve
       goal_y_ = getRandomDouble(-max_y_, max_y_);
       goal_z_ = getRandomDouble(2.0, max_z_);
 
-      goal_x_ = 1;
+      goal_x_ = sin(time_now);
       goal_y_ = 1;
       goal_z_ = 1;
 
