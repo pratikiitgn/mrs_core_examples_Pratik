@@ -157,6 +157,10 @@ void WaypointFlierSimple::callbackMainTimer([[maybe_unused]] const ros::TimerEve
       goal_y_ = getRandomDouble(-max_y_, max_y_);
       goal_z_ = getRandomDouble(2.0, max_z_);
 
+      goal_x_ = 1;
+      goal_y_ = 1;
+      goal_z_ = 1;
+
       ROS_INFO_STREAM("[WaypointFlierSimple]: New goal X: " << goal_x_ << " Y: " << goal_y_ << " Z: " << goal_z_);
     }
 
