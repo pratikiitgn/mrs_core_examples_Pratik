@@ -168,13 +168,15 @@ void WaypointFlierSimple::callbackMainTimer([[maybe_unused]] const ros::TimerEve
     if (dist_to_ref < 1.0) {
 
       ROS_INFO_STREAM("[WaypointFlierSimple]: Goal reached!");
-      
 
       // generate new goal
       goal_x_ = getRandomDouble(-max_x_, max_x_);
       goal_y_ = getRandomDouble(-max_y_, max_y_);
       goal_z_ = getRandomDouble(2.0, max_z_);
 
+      goal_x_ = 1;
+      goal_y_ = 1;
+      goal_z_ = 1;
 
       ROS_INFO_STREAM("[WaypointFlierSimple]: New goal X: " << goal_x_ << " Y: " << goal_y_ << " Z: " << goal_z_);
     }
