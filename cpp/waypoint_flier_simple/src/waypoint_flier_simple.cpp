@@ -161,8 +161,6 @@ void WaypointFlierSimple::callbackMainTimer([[maybe_unused]] const ros::TimerEve
       goal_y_ = 1;
       goal_z_ = 1;
 
-      
-
       ROS_INFO_STREAM("[WaypointFlierSimple]: New goal X: " << goal_x_ << " Y: " << goal_y_ << " Z: " << goal_z_);
     }
 
