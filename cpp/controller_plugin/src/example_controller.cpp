@@ -278,7 +278,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
                                                                              common_handlers_->getMass() * common_handlers_->g + drs_params.force);
 
-
   // | ----------------- set the control output ----------------- |
 
   last_control_output_.control_output = attitude_cmd;
