@@ -14,6 +14,16 @@
 #include <mrs_lib/mutex.h>
 #include <mrs_lib/attitude_converter.h>
 
+// | ----------------- High level commands ----------------- |
+float quad_z      = 0.0;
+float des_quad_z  = 0.0;
+
+// | ----------------- High level commands ----------------- |
+float des_roll_angle    = 0.0;
+float des_pitch_angle   = 0.0;
+float des_yaw_angle     = 0.0;
+float thrust_force      = 0.0;
+
 //}
 
 namespace example_controller_plugin
@@ -270,13 +280,34 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   position_reference.pose.orientation = mrs_lib::AttitudeConverter(0, 0, 0).setHeading(tracker_command.heading);
 
 
+  // | ---------------- Custom PD Controller for altitude control --------------- |
+  // quad_z = uav_state.position.x;
+  // uav_state.
+
+
   // | ---------------- prepare the control output --------------- |
 
+  //////////////////////// Previous code starts  ////////////////////////
   mrs_msgs::HwApiAttitudeCmd attitude_cmd;
+
+  drs_params.roll     = des_roll_angle;
+  drs_params.pitch    = des_pitch_angle;
+  drs_params.yaw      = des_yaw_angle;
+  drs_params.force    = thrust_force;
 
   attitude_cmd.orientation = mrs_lib::AttitudeConverter(drs_params.roll, drs_params.pitch, drs_params.yaw);
   attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
                                                                              common_handlers_->getMass() * common_handlers_->g + drs_params.force);
+  //////////////////////// Previous code ends ////////////////////////
+
+  //////////////////////// Modified code starts ////////////////////////
+  // mrs_msgs::HwApiAttitudeCmd attitude_cmd;
+
+  // attitude_cmd.orientation = mrs_lib::AttitudeConverter(des_roll_angle, des_pitch_angle, des_yaw_angle);
+  // attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
+  //                                                                            common_handlers_->getMass() * common_handlers_->g + thrust_force);
+  //////////////////////// Modified code ends ////////////////////////
+
 
   // | ----------------- set the control output ----------------- |
 
