@@ -233,6 +233,7 @@ void ExampleWaypointFlier::onInit() {
 
   // you can disable autostarting of the timer by the last argument
   timer_publisher_reference_ = nh.createTimer(ros::Rate(_rate_timer_publisher_reference_), &ExampleWaypointFlier::timerPublishSetReference, this, false, false);
+  // timer_publisher_reference_ = nh.createTimer(ros::Rate(_rate_timer_publisher_reference_), &ExampleWaypointFlier::timerPublishSetReference, this, false, true);
 
   // | --------------- initialize service servers --------------- |
 

@@ -18,10 +18,10 @@ waypoint_desired_distance: 0.3
 
 # matrix of waypoints which will be flown through by the UAV
 # x [m], y [m], z [m], heading [rad]
-waypoints: [-10, -10, 3, 0,
-            10, -10, 3, 1.57,
-            10, 10, 3, 3.14,
-            -10, 10, 3, 4.61]
+waypoints: [-5, -5, 3, 0,
+            5, -5, 3, 0,
+            5, 5, 3, 0,
+            -5, 5, 3, 0]
 
 # in which frame of reference are the points specified?
 waypoints_frame: "world_origin"
