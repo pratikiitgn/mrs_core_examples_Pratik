@@ -14,15 +14,28 @@
 #include <mrs_lib/mutex.h>
 #include <mrs_lib/attitude_converter.h>
 
-// | ----------------- High level commands ----------------- |
+// | ----------------- State of the system ----------------- |
+float quad_x      = 0.0;
+float quad_y      = 0.0;
 float quad_z      = 0.0;
-float des_quad_z  = 0.0;
+
+float quad_x_dot  = 0.0;
+float quad_y_dot  = 0.0;
+float quad_z_dot  = 0.0;
+
+float des_quad_z      = 3.0;
+float des_quad_z_dot  = 0.0;
+
+// | ----------------- Custom Gains ----------------- |
+
+float kpz         = 0.1;
+float kdz         = 0.1;
 
 // | ----------------- High level commands ----------------- |
 float des_roll_angle    = 0.0;
 float des_pitch_angle   = 0.0;
 float des_yaw_angle     = 0.0;
-float thrust_force      = 0.0;
+float thrust_force      = 0.01;
 
 //}
 
@@ -150,6 +163,8 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("desired_pitch", drs_params_.pitch);
   param_loader.loadParam("desired_yaw", drs_params_.yaw);
   param_loader.loadParam("desired_thrust_force", drs_params_.force);
+  param_loader.loadParam("kpz_value", kpz);
+  param_loader.loadParam("kdz_value", kdz);
 
   // | ------------------ finish loading params ----------------- |
 
@@ -281,13 +296,18 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
 
   // | ---------------- Custom PD Controller for altitude control --------------- |
-  // quad_z = uav_state.position.x;
-  // uav_state.
+  quad_x = uav_state.pose.position.x;
+  quad_y = uav_state.pose.position.y;
+  quad_z = uav_state.pose.position.z;
 
+  quad_x_dot = uav_state.velocity.linear.x;
+  quad_y_dot = uav_state.velocity.linear.y;
+  quad_z_dot = uav_state.velocity.linear.z;
+
+  thrust_force = kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
 
   // | ---------------- prepare the control output --------------- |
 
-  //////////////////////// Previous code starts  ////////////////////////
   mrs_msgs::HwApiAttitudeCmd attitude_cmd;
 
   drs_params.roll     = des_roll_angle;
@@ -299,15 +319,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
                                                                              common_handlers_->getMass() * common_handlers_->g + drs_params.force);
   //////////////////////// Previous code ends ////////////////////////
-
-  //////////////////////// Modified code starts ////////////////////////
-  // mrs_msgs::HwApiAttitudeCmd attitude_cmd;
-
-  // attitude_cmd.orientation = mrs_lib::AttitudeConverter(des_roll_angle, des_pitch_angle, des_yaw_angle);
-  // attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
-  //                                                                            common_handlers_->getMass() * common_handlers_->g + thrust_force);
-  //////////////////////// Modified code ends ////////////////////////
-
 
   // | ----------------- set the control output ----------------- |
 
