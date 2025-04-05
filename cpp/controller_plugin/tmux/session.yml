@@ -42,6 +42,7 @@ windows:
           custom_config:=./config/custom_config.yaml
           world_config:=./config/world_config.yaml
           network_config:=./config/network_config.yaml
+        # - 'history -s roscore'
   - rviz:
       layout: tiled
       panes:

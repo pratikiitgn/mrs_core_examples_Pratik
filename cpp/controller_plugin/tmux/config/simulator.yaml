@@ -1,5 +1,5 @@
-simulation_rate: 100
-clock_rate: 100
+simulation_rate: 200
+clock_rate: 200
 realtime_factor: 0.5
 
 uav_names: [
