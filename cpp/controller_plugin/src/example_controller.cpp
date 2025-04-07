@@ -88,13 +88,13 @@ public:
   ////////////////////////////////////////////////
   //// for custom controller
   ////////////////////////////////////////////////
-  float norm_2(Eigen::Vector3d A, Eigen::Vector3d B);
+  float norm_two(Eigen::Vector3d A, Eigen::Vector3d B);
   float min_acc_first_coefficient(float t1, float t2, float st, float en);
   float min_acc_second_coefficient(float t1, float t2, float st, float en);
   float min_acc_third_coefficient(float t1, float t2, float st, float en);
   float min_acc_fourth_coefficient(float t1, float t2, float st, float en);
   float clipping_angle(float max_value, float current_angle);
-  void IITGN_text_traj_planning(void);
+
   ////////////////////////////////////////////////
   //// for custom controller
   ////////////////////////////////////////////////
@@ -149,6 +149,7 @@ private:
 
   ros::Time         last_update_time_;
   std::atomic<bool> first_iteration_ = true;
+  
 };
 
 //}
@@ -338,10 +339,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   // | -------------- prepare the control reference ------------- |
 
-  IITGN_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
-
-  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << IITGN_text_start_time);
-
   geometry_msgs::PoseStamped position_reference;
 
   position_reference.header           = tracker_command.header;
@@ -349,6 +346,149 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   position_reference.pose.orientation = mrs_lib::AttitudeConverter(0, 0, 0).setHeading(tracker_command.heading);
 
   // | ---------------- Custom PD Controller for altitude control --------------- |
+
+  IITGN_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
+  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << IITGN_text_start_time);
+
+  ////////////////////////////////////////////////////////////////////////////////////////
+  //     Trajectory for tracking IITGN Text
+  Eigen::Vector3d Z(0,0,0);
+  Eigen::Vector3d A(0,0,2);
+  Eigen::Vector3d B(0,0,5);
+  Eigen::Vector3d C(0,1,5);
+  Eigen::Vector3d D(0,1,2);
+  Eigen::Vector3d E(0,2.5,2);
+  Eigen::Vector3d FF(0,2.5,5);
+  Eigen::Vector3d G(0,1.5,5);
+  Eigen::Vector3d H(0,3.5,5);
+  Eigen::Vector3d I(0,6,4.5);
+  Eigen::Vector3d J(0,6,5);
+  Eigen::Vector3d K(0,4,5);
+  Eigen::Vector3d L(0,4,2);
+  Eigen::Vector3d M(0,6,2);
+  Eigen::Vector3d N(0,6,3.5);
+  Eigen::Vector3d O(0,5,3.5);
+  Eigen::Vector3d P(0,7,2);
+  Eigen::Vector3d Q(0,7,5);
+  Eigen::Vector3d R(0,9,2);
+  Eigen::Vector3d S(0,9,5);
+  Eigen::Vector3d Y(0,9,0);
+
+  float Pos_array[21][3] = {{0,0,0},
+                           {0,0,2},
+                           {0,0,5},
+                           {0,1,5},
+                           {0,1,2},
+                           {0,2.5,2},
+                           {0,2.5,5},
+                           {0,1.5,5},
+                           {0,3.5,5},
+                           {0,6,4.5},
+                           {0,6,5},
+                           {0,4,5},
+                           {0,4,2},
+                           {0,6,2},
+                           {0,6,3.5},
+                           {0,5,3.5},
+                           {0,7,2},
+                           {0,7,5},
+                           {0,9,2},
+                           {0,9,5},
+                           {0,9,0}};
+
+float V_max = 0.5;
+  
+  float  tZ = 0;
+  float  tA = tZ + (norm_two(A , Z)/V_max);
+  float  tB = tA + (norm_two(B , A)/V_max);
+  float  tC = tB + (norm_two(C , B)/V_max);
+  float  tD = tC + (norm_two(D , C)/V_max);
+  float  tE = tD + (norm_two(E , D)/V_max);
+  float  tF = tE + (norm_two(FF , E)/V_max);
+  float  tG = tF + (norm_two(G , FF)/V_max);
+  float  tH = tG + (norm_two(H , G)/V_max);
+  float  tI = tH + (norm_two(I , H)/V_max);
+  float  tJ = tI + (norm_two(J , I)/V_max);
+  float  tK = tJ + (norm_two(K , J)/V_max);
+  float  tL = tK + (norm_two(L , K)/V_max);
+  float  tM = tL + (norm_two(M , L)/V_max);
+  float  tN = tM + (norm_two(N , M)/V_max);
+  float  tO = tN + (norm_two(O , N)/V_max);
+  float  tP = tO + (norm_two(P , O)/V_max);
+  float  tQ = tP + (norm_two(Q , P)/V_max);
+  float  tR = tQ + (norm_two(R , Q)/V_max);
+  float  tS = tR + (norm_two(S , R)/V_max);
+  float  tY = tS + (norm_two(Y , S)/V_max);
+
+  float t_array[21][1] = {{tZ},
+                          {tA},
+                          {tB},
+                          {tC},
+                          {tD},
+                          {tE},
+                          {tF},
+                          {tG},
+                          {tH},
+                          {tI},
+                          {tJ},
+                          {tK},
+                          {tL},
+                          {tM},
+                          {tN},
+                          {tO},
+                          {tP},
+                          {tQ},
+                          {tR},
+                          {tS},
+                          {tY}};
+
+  float tt = IITGN_text_start_time;
+  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
+
+  for (int i = 0; i < 21; i++) {
+  
+        if (IITGN_text_start_time >= t_array[i][0]){
+          t1_IITGN_traj  = t_array[i][0];
+          t2_IITGN_traj  = t_array[i+1][0];
+          sty_IITGN_traj = Pos_array[i][1];
+          stz_IITGN_traj = Pos_array[i][2];
+          eny_IITGN_traj = Pos_array[i+1][1];
+          enz_IITGN_traj = Pos_array[i+1][2];
+        }
+  }
+  
+  // hal.console->printf("%5.3f, %5.3f\n",t1_IITGN_traj,t2_IITGN_traj);
+  
+  float ay =  min_acc_first_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
+  float by = min_acc_second_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
+  float cy =  min_acc_third_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
+  float dy = min_acc_fourth_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
+  
+  float az =  min_acc_first_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
+  float bz = min_acc_second_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
+  float cz =  min_acc_third_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
+  float dz = min_acc_fourth_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
+  
+  des_quad_x = 0.0;
+  des_quad_y = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
+  des_quad_z = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
+  
+  if (IITGN_text_start_time > 92.3101){
+      des_quad_x = 0.0;
+      des_quad_y = 9.0;
+      des_quad_z = 0.0;
+  }
+  ////////////////////////////////////////////////////////////////////////////////////////
+
+  ROS_INFO_STREAM_THROTTLE(0.2, "xd:" << des_quad_x);
+  ROS_INFO_STREAM_THROTTLE(0.2, "yd:" << des_quad_y);
+  ROS_INFO_STREAM_THROTTLE(0.2, "zd:" << des_quad_z);
+
+
+  // Desired values of the position
+  // des_quad_x = 1.0;
+  // des_quad_y = 1.0;
+  // des_quad_z = 2.0;
 
   // Getting positional state of the drone
   quad_x = uav_state.pose.position.x;
@@ -358,11 +498,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   quad_x_dot = uav_state.velocity.linear.x;
   quad_y_dot = uav_state.velocity.linear.y;
   quad_z_dot = uav_state.velocity.linear.z;
-
-  // Desired values of the position
-  des_quad_x = 1.0;
-  des_quad_y = 1.0;
-  des_quad_z = 2.0;
 
   // | ---------------- prepare the control output --------------- |
   
@@ -475,167 +610,6 @@ void ExampleController::callbackDrs(example_controller_plugin::example_controlle
   ROS_INFO("[ExampleController]: dynamic reconfigure params updated");
 }
 
-void ExampleController::IITGN_text_traj_planning(){
-
-  Eigen::Vector3d Z(0,0,0);
-  Eigen::Vector3d A(0,0,2);
-  Eigen::Vector3d B(0,0,5);
-  Eigen::Vector3d C(0,1,5);
-  Eigen::Vector3d D(0,1,2);
-  Eigen::Vector3d E(0,2.5,2);
-  Eigen::Vector3d FF(0,2.5,5);
-  Eigen::Vector3d G(0,1.5,5);
-  Eigen::Vector3d H(0,3.5,5);
-  Eigen::Vector3d I(0,6,4.5);
-  Eigen::Vector3d J(0,6,5);
-  Eigen::Vector3d K(0,4,5);
-  Eigen::Vector3d L(0,4,2);
-  Eigen::Vector3d M(0,6,2);
-  Eigen::Vector3d N(0,6,3.5);
-  Eigen::Vector3d O(0,5,3.5);
-  Eigen::Vector3d P(0,7,2);
-  Eigen::Vector3d Q(0,7,5);
-  Eigen::Vector3d R(0,9,2);
-  Eigen::Vector3d S(0,9,5);
-  Eigen::Vector3d Y(0,9,0);
-  
-  float Pos_array[21][3] = {{0,0,0},
-                           {0,0,2},
-                           {0,0,5},
-                           {0,1,5},
-                           {0,1,2},
-                           {0,2.5,2},
-                           {0,2.5,5},
-                           {0,1.5,5},
-                           {0,3.5,5},
-                           {0,6,4.5},
-                           {0,6,5},
-                           {0,4,5},
-                           {0,4,2},
-                           {0,6,2},
-                           {0,6,3.5},
-                           {0,5,3.5},
-                           {0,7,2},
-                           {0,7,5},
-                           {0,9,2},
-                           {0,9,5},
-                           {0,9,0}};
-  
-  // float light[21][1] = {{0},
-  //              {1},
-  //              {0},
-  //              {1},
-  //              {0},
-  //              {1},
-  //              {1},
-  //              {1},
-  //              {0},
-  //              {1},
-  //              {1},
-  //              {1},
-  //              {1},
-  //              {1},
-  //              {1},
-  //              {0},
-  //              {1},
-  //              {1},
-  //              {1},
-  //              {0},
-  //              {0}};
-  
-  float V_max = 0.5;
-  
-  float  tZ = 0;
-  float  tA = tZ + (norm_2(A , Z)/V_max);
-  float  tB = tA + (norm_2(B , A)/V_max);
-  float  tC = tB + (norm_2(C , B)/V_max);
-  float  tD = tC + (norm_2(D , C)/V_max);
-  float  tE = tD + (norm_2(E , D)/V_max);
-  float  tF = tE + (norm_2(FF , E)/V_max);
-  float  tG = tF + (norm_2(G , FF)/V_max);
-  float  tH = tG + (norm_2(H , G)/V_max);
-  float  tI = tH + (norm_2(I , H)/V_max);
-  float  tJ = tI + (norm_2(J , I)/V_max);
-  float  tK = tJ + (norm_2(K , J)/V_max);
-  float  tL = tK + (norm_2(L , K)/V_max);
-  float  tM = tL + (norm_2(M , L)/V_max);
-  float  tN = tM + (norm_2(N , M)/V_max);
-  float  tO = tN + (norm_2(O , N)/V_max);
-  float  tP = tO + (norm_2(P , O)/V_max);
-  float  tQ = tP + (norm_2(Q , P)/V_max);
-  float  tR = tQ + (norm_2(R , Q)/V_max);
-  float  tS = tR + (norm_2(S , R)/V_max);
-  float  tY = tS + (norm_2(Y , S)/V_max);
-  
-  // hal.console->printf("%2.2f,%2.2f,%2.2f,%2.2f,%2.2f,%2.2f\n", tO,tP,tQ,tR,tS,tY);
-  
-  float t_array[21][1] = {{tZ},
-                          {tA},
-                          {tB},
-                          {tC},
-                          {tD},
-                          {tE},
-                          {tF},
-                          {tG},
-                          {tH},
-                          {tI},
-                          {tJ},
-                          {tK},
-                          {tL},
-                          {tM},
-                          {tN},
-                          {tO},
-                          {tP},
-                          {tQ},
-                          {tR},
-                          {tS},
-                          {tY}};
-  
-  // hal.console->printf("%3.2f,%3.2f,%3.2f,%3.2f,%3.2f,%3.2f\n", t_array[6][0],t_array[7][0],t_array[8][0],t_array[9][0],t_array[10][0],t_array[11][0]);
-  
-  float tt = IITGN_text_start_time;
-  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
-
-  for (int i = 0; i < 21; i++) {
-  
-       if (IITGN_text_start_time >= t_array[i][0]){
-          t1_IITGN_traj  = t_array[i][0];
-          t2_IITGN_traj  = t_array[i+1][0];
-          sty_IITGN_traj = Pos_array[i][1];
-          stz_IITGN_traj = Pos_array[i][2];
-          eny_IITGN_traj = Pos_array[i+1][1];
-          enz_IITGN_traj = Pos_array[i+1][2];
-       }
-  }
-  
-  // hal.console->printf("%5.3f, %5.3f\n",t1_IITGN_traj,t2_IITGN_traj);
-  
-  float ay =  min_acc_first_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
-  float by = min_acc_second_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
-  float cy =  min_acc_third_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
-  float dy = min_acc_fourth_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
-  
-  float az =  min_acc_first_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
-  float bz = min_acc_second_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
-  float cz =  min_acc_third_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
-  float dz = min_acc_fourth_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
-  
-  des_quad_x = 0.0;
-  des_quad_y = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
-  des_quad_z = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
-  
-  if (IITGN_text_start_time > 92.3101){
-      des_quad_x = 0.0;
-      des_quad_y = 9.0;
-      des_quad_z = 0.0;
-  }
-
-  des_quad_x = 0.0;
-  des_quad_y = 0.0;
-  des_quad_z = 2.0;
-
-}
-
 float ExampleController::min_acc_first_coefficient(float t1, float t2, float st, float en){
   float a = (2*(en - st)) /  ((t1 - t2)*(t1 - t2)*(t1 - t2));
   return a;
@@ -668,6 +642,15 @@ float ExampleController::clipping_angle(float max_value, float current_angle){
   }
   return current_angle;
 }
+
+float ExampleController::norm_two(Eigen::Vector3d A, Eigen::Vector3d B){
+
+  float norm__  = (A[0] - B[0]) * (A[0] - B[0]) + (A[1] - B[1]) * (A[1] - B[1]) + (A[2] - B[2]) * (A[2] - B[2]);
+  norm__ = sqrtf(norm__ );
+  return norm__;
+
+}
+
 //}
 
 }  // namespace example_controller
