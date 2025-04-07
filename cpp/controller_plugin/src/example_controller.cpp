@@ -20,10 +20,9 @@
 
 // | ----------------- Time related variables ----------------- |
 float IITGN_text_start_time = 0.0;
-
+double initial_ros_time_custom_controller = 0.0;
 float t1_IITGN_traj = 0.0;
 float t2_IITGN_traj = 0.0;
-double dt           = 0.0;
 // | ----------------- Position related variables ----------------- |
 float sty_IITGN_traj = 0.0;
 float stz_IITGN_traj = 0.0;
@@ -41,8 +40,7 @@ float quad_z_dot  = 0.0;
 
 float des_quad_x      = 0.0;
 float des_quad_y      = 0.0;
-float des_quad_z      = 0.0;
-
+float des_quad_z      = 2.0;
 
 float des_quad_x_dot  = 0.0;
 float des_quad_y_dot  = 0.0;
@@ -81,6 +79,19 @@ public:
 
   void updateInactive(const mrs_msgs::UavState& uav_state, const std::optional<mrs_msgs::TrackerCommand>& tracker_command);
 
+  ////////////////////////////////////////////////
+  //// for custom controller
+  ////////////////////////////////////////////////
+  float norm_2(Eigen::Vector3d A, Eigen::Vector3d B);
+  float min_acc_first_coefficient(float t1, float t2, float st, float en);
+  float min_acc_second_coefficient(float t1, float t2, float st, float en);
+  float min_acc_third_coefficient(float t1, float t2, float st, float en);
+  float min_acc_fourth_coefficient(float t1, float t2, float st, float en);
+  void IITGN_text_traj_planning(void);
+  ////////////////////////////////////////////////
+  //// for custom controller
+  ////////////////////////////////////////////////
+
   ControlOutput updateActive(const mrs_msgs::UavState& uav_state, const mrs_msgs::TrackerCommand& tracker_command);
 
   const mrs_msgs::ControllerStatus getStatus();
@@ -88,18 +99,6 @@ public:
   void switchOdometrySource(const mrs_msgs::UavState& new_uav_state);
 
   void resetDisturbanceEstimators(void);
-
-////////////////////////////////////////////////
-////////////////////////////////////////////////
-  void IITGN_text_traj_planning(void);
-  float norm_2(Eigen::Vector3f A, Eigen::Vector3f B);
-  float min_acc_first_coefficient(float t1, float t2, float st, float en);
-  float min_acc_second_coefficient(float t1, float t2, float st, float en);
-  float min_acc_third_coefficient(float t1, float t2, float st, float en);
-  float min_acc_fourth_coefficient(float t1, float t2, float st, float en);
-
-////////////////////////////////////////////////
-////////////////////////////////////////////////
 
   const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr setConstraints(const mrs_msgs::DynamicsConstraintsSrvRequest::ConstPtr& cmd);
 
@@ -164,6 +163,7 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   _uav_mass_ = common_handlers->getMass();
 
   last_update_time_ = ros::Time(0);
+  initial_ros_time_custom_controller =ros::Time::now().toSec();
 
   ros::Time::waitForValid();
 
@@ -286,6 +286,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   }
 
   // | ---------- calculate dt from the last iteration ---------- |
+  double dt;
 
   if (first_iteration_) {
     dt               = 0.01;
@@ -324,9 +325,11 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 ///////////////////////////////////////////////
 ///////////////////////////////////////////////
 
-// IITGN_text_traj_planning();
-
   // | -------------- prepare the control reference ------------- |
+
+  IITGN_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
+
+  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << IITGN_text_start_time);
 
   geometry_msgs::PoseStamped position_reference;
 
@@ -342,6 +345,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   quad_x_dot = uav_state.velocity.linear.x;
   quad_y_dot = uav_state.velocity.linear.y;
   quad_z_dot = uav_state.velocity.linear.z;
+
+  des_quad_z = 2.0 + sin(IITGN_text_start_time);
 
   thrust_force = kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
 
@@ -450,27 +455,27 @@ void ExampleController::callbackDrs(example_controller_plugin::example_controlle
 
 void ExampleController::IITGN_text_traj_planning(){
 
-  Eigen::Vector3f Z(0,0,0);
-  Eigen::Vector3f A(0,0,2);
-  Eigen::Vector3f B(0,0,5);
-  Eigen::Vector3f C(0,1,5);
-  Eigen::Vector3f D(0,1,2);
-  Eigen::Vector3f E(0,2.5,2);
-  Eigen::Vector3f FF(0,2.5,5);
-  Eigen::Vector3f G(0,1.5,5);
-  Eigen::Vector3f H(0,3.5,5);
-  Eigen::Vector3f I(0,6,4.5);
-  Eigen::Vector3f J(0,6,5);
-  Eigen::Vector3f K(0,4,5);
-  Eigen::Vector3f L(0,4,2);
-  Eigen::Vector3f M(0,6,2);
-  Eigen::Vector3f N(0,6,3.5);
-  Eigen::Vector3f O(0,5,3.5);
-  Eigen::Vector3f P(0,7,2);
-  Eigen::Vector3f Q(0,7,5);
-  Eigen::Vector3f R(0,9,2);
-  Eigen::Vector3f S(0,9,5);
-  Eigen::Vector3f Y(0,9,0);
+  Eigen::Vector3d Z(0,0,0);
+  Eigen::Vector3d A(0,0,2);
+  Eigen::Vector3d B(0,0,5);
+  Eigen::Vector3d C(0,1,5);
+  Eigen::Vector3d D(0,1,2);
+  Eigen::Vector3d E(0,2.5,2);
+  Eigen::Vector3d FF(0,2.5,5);
+  Eigen::Vector3d G(0,1.5,5);
+  Eigen::Vector3d H(0,3.5,5);
+  Eigen::Vector3d I(0,6,4.5);
+  Eigen::Vector3d J(0,6,5);
+  Eigen::Vector3d K(0,4,5);
+  Eigen::Vector3d L(0,4,2);
+  Eigen::Vector3d M(0,6,2);
+  Eigen::Vector3d N(0,6,3.5);
+  Eigen::Vector3d O(0,5,3.5);
+  Eigen::Vector3d P(0,7,2);
+  Eigen::Vector3d Q(0,7,5);
+  Eigen::Vector3d R(0,9,2);
+  Eigen::Vector3d S(0,9,5);
+  Eigen::Vector3d Y(0,9,0);
   
   float Pos_array[21][3] = {{0,0,0},
                            {0,0,2},
@@ -566,7 +571,6 @@ void ExampleController::IITGN_text_traj_planning(){
   
   // hal.console->printf("%3.2f,%3.2f,%3.2f,%3.2f,%3.2f,%3.2f\n", t_array[6][0],t_array[7][0],t_array[8][0],t_array[9][0],t_array[10][0],t_array[11][0]);
   
-  IITGN_text_start_time = IITGN_text_start_time + dt;
   float tt = IITGN_text_start_time;
   ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
 
@@ -603,6 +607,11 @@ void ExampleController::IITGN_text_traj_planning(){
       des_quad_y = 9.0;
       des_quad_z = 0.0;
   }
+
+  des_quad_x = 0.0;
+  des_quad_y = 0.0;
+  des_quad_z = 2.0;
+
 }
 
 float ExampleController::min_acc_first_coefficient(float t1, float t2, float st, float en){
