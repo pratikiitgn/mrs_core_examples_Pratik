@@ -48,8 +48,14 @@ float des_quad_z_dot  = 0.0;
 
 // | ----------------- Custom Gains ----------------- |
 
-float kpz         = 0.1;
-float kdz         = 0.1;
+float kpx         = 0.0;
+float kdx         = 0.0;
+
+float kpy         = 0.00;
+float kdy         = 0.00;
+
+float kpz         = 0.0;
+float kdz         = 0.0;
 
 // | ----------------- High level commands ----------------- |
 float des_roll_angle    = 0.0;
@@ -87,6 +93,7 @@ public:
   float min_acc_second_coefficient(float t1, float t2, float st, float en);
   float min_acc_third_coefficient(float t1, float t2, float st, float en);
   float min_acc_fourth_coefficient(float t1, float t2, float st, float en);
+  float clipping_angle(float max_value, float current_angle);
   void IITGN_text_traj_planning(void);
   ////////////////////////////////////////////////
   //// for custom controller
@@ -197,6 +204,10 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("desired_pitch", drs_params_.pitch);
   param_loader.loadParam("desired_yaw", drs_params_.yaw);
   param_loader.loadParam("desired_thrust_force", drs_params_.force);
+  param_loader.loadParam("kpx_value", kpx);
+  param_loader.loadParam("kdx_value", kdx);
+  param_loader.loadParam("kpy_value", kpy);
+  param_loader.loadParam("kdy_value", kdy);
   param_loader.loadParam("kpz_value", kpz);
   param_loader.loadParam("kdz_value", kdz);
 
@@ -329,7 +340,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   IITGN_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
 
-  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << IITGN_text_start_time);
+  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << IITGN_text_start_time);
 
   geometry_msgs::PoseStamped position_reference;
 
@@ -338,6 +349,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   position_reference.pose.orientation = mrs_lib::AttitudeConverter(0, 0, 0).setHeading(tracker_command.heading);
 
   // | ---------------- Custom PD Controller for altitude control --------------- |
+
+  // Getting positional state of the drone
   quad_x = uav_state.pose.position.x;
   quad_y = uav_state.pose.position.y;
   quad_z = uav_state.pose.position.z;
@@ -346,19 +359,28 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   quad_y_dot = uav_state.velocity.linear.y;
   quad_z_dot = uav_state.velocity.linear.z;
 
-  des_quad_z = 2.0 + sin(IITGN_text_start_time);
-
-  thrust_force = kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
+  // Desired values of the position
+  des_quad_x = 1.0;
+  des_quad_y = 1.0;
+  des_quad_z = 2.0;
 
   // | ---------------- prepare the control output --------------- |
+  
+  thrust_force = kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
+  des_pitch_angle     =   kpx * ( des_quad_x - quad_x) + kdx * ( des_quad_x_dot - quad_x_dot);
+  des_roll_angle      = - kpy * ( des_quad_y - quad_y) - kdy * ( des_quad_y_dot - quad_y_dot);
+  
+  des_pitch_angle     = clipping_angle(0.35, des_pitch_angle);
+  des_roll_angle      = clipping_angle(0.35, des_roll_angle);
 
-  mrs_msgs::HwApiAttitudeCmd attitude_cmd;
+  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll+angle: " << des_roll_angle);
 
   drs_params.roll     = des_roll_angle;
   drs_params.pitch    = des_pitch_angle;
   drs_params.yaw      = des_yaw_angle;
   drs_params.force    = thrust_force;
 
+  mrs_msgs::HwApiAttitudeCmd attitude_cmd;
   attitude_cmd.orientation = mrs_lib::AttitudeConverter(drs_params.roll, drs_params.pitch, drs_params.yaw);
   attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
                                                                              common_handlers_->getMass() * common_handlers_->g + drs_params.force);
@@ -634,6 +656,18 @@ float ExampleController::min_acc_fourth_coefficient(float t1, float t2, float st
   return d;
 }
 
+float ExampleController::clipping_angle(float max_value, float current_angle){
+  if (current_angle > max_value) // 0.35 rad means 20 deg
+  {
+    current_angle = max_value;
+  }
+
+  if (current_angle < -max_value) // 0.35 rad means 20 deg
+  {
+    current_angle = -max_value;
+  }
+  return current_angle;
+}
 //}
 
 }  // namespace example_controller
