@@ -4,10 +4,10 @@ desired_yaw:          0.0 # [rad]
 desired_thrust_force: 0.2 # [N], additional to gravity compensation
 
 kpx_value: 0.2
-kdx_value: 0.135
+kdx_value: 0.3
 
 kpy_value: 0.2
-kdy_value: 0.18
+kdy_value: 0.3
 
 kpz_value: 1.2
 kdz_value: 1.9

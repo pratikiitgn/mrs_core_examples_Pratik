@@ -399,7 +399,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
                            {0,-14,6},
                            {0,-14,6},};
 
-  float V_max = 1.0;
+  float V_max = 0.5;
   
   float  tZ = 20;
   float  tA = tZ + (norm_two(A , Z)/V_max);
@@ -448,8 +448,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   float tt = MRS_text_start_time;
   ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
 
-
-
   for (int i = 0; i < 21; i++) {
   
         if (MRS_text_start_time >= t_array[i][0]){
@@ -490,6 +488,10 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     des_quad_y = Z[1];
     des_quad_z = Z[2];
   }
+
+  // des_quad_y = 1;
+  // des_quad_z = 3;
+
   ////////////////////////////////////////////////////////////////////////////////////////
 
   ROS_INFO_STREAM_THROTTLE(0.2, "xd:" << des_quad_x);
@@ -519,7 +521,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   des_pitch_angle     = clipping_angle(0.78, des_pitch_angle);
   des_roll_angle      = clipping_angle(0.78, des_roll_angle);
 
-  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll+angle: " << des_roll_angle);
+  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll_angle: " << des_roll_angle);
 
   drs_params.roll     = des_roll_angle;
   drs_params.pitch    = des_pitch_angle;
