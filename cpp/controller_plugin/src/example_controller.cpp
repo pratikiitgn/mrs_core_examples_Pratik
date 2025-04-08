@@ -19,15 +19,15 @@
 #include <Eigen/Dense>
 
 // | ----------------- Time related variables ----------------- |
-float IITGN_text_start_time = 0.0;
+float MRS_text_start_time = 0.0;
 double initial_ros_time_custom_controller = 0.0;
-float t1_IITGN_traj = 0.0;
-float t2_IITGN_traj = 0.0;
+float t1_MRS_traj = 0.0;
+float t2_MRS_traj = 0.0;
 // | ----------------- Position related variables ----------------- |
-float sty_IITGN_traj = 0.0;
-float stz_IITGN_traj = 0.0;
-float eny_IITGN_traj = 0.0;
-float enz_IITGN_traj = 0.0;
+float sty_MRS_traj = 0.0;
+float stz_MRS_traj = 0.0;
+float eny_MRS_traj = 0.0;
+float enz_MRS_traj = 0.0;
 
 // | ----------------- State of the system ----------------- |
 float quad_x      = 0.0;
@@ -347,58 +347,61 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   // | ---------------- Custom PD Controller for altitude control --------------- |
 
-  IITGN_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
-  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << IITGN_text_start_time);
+  MRS_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
+  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << MRS_text_start_time);
 
   ////////////////////////////////////////////////////////////////////////////////////////
-  //     Trajectory for tracking IITGN Text
-  Eigen::Vector3d Z(0,0,0);
-  Eigen::Vector3d A(0,0,2);
-  Eigen::Vector3d B(0,0,5);
-  Eigen::Vector3d C(0,1,5);
-  Eigen::Vector3d D(0,1,2);
-  Eigen::Vector3d E(0,2.5,2);
-  Eigen::Vector3d FF(0,2.5,5);
-  Eigen::Vector3d G(0,1.5,5);
-  Eigen::Vector3d H(0,3.5,5);
-  Eigen::Vector3d I(0,6,4.5);
-  Eigen::Vector3d J(0,6,5);
-  Eigen::Vector3d K(0,4,5);
-  Eigen::Vector3d L(0,4,2);
-  Eigen::Vector3d M(0,6,2);
-  Eigen::Vector3d N(0,6,3.5);
-  Eigen::Vector3d O(0,5,3.5);
-  Eigen::Vector3d P(0,7,2);
-  Eigen::Vector3d Q(0,7,5);
-  Eigen::Vector3d R(0,9,2);
-  Eigen::Vector3d S(0,9,5);
-  Eigen::Vector3d Y(0,9,0);
+  //     Trajectory for tracking MRS Text
+  Eigen::Vector3d Z(0,0,2);
+  Eigen::Vector3d A(0,0,6);
+  Eigen::Vector3d B(0,-2,4);
+  Eigen::Vector3d C(0,-4,6);
+  Eigen::Vector3d D(0,-4,2);
 
-  float Pos_array[21][3] = {{0,0,0},
-                           {0,0,2},
-                           {0,0,5},
-                           {0,1,5},
-                           {0,1,2},
-                           {0,2.5,2},
-                           {0,2.5,5},
-                           {0,1.5,5},
-                           {0,3.5,5},
-                           {0,6,4.5},
-                           {0,6,5},
-                           {0,4,5},
-                           {0,4,2},
-                           {0,6,2},
-                           {0,6,3.5},
-                           {0,5,3.5},
-                           {0,7,2},
-                           {0,7,5},
-                           {0,9,2},
-                           {0,9,5},
-                           {0,9,0}};
+  Eigen::Vector3d E(0,-6,2);
+  Eigen::Vector3d FF(0,-6,6);
+  Eigen::Vector3d G(0,-9,6);
+  Eigen::Vector3d H(0,-9,4);
+  Eigen::Vector3d I(0,-6,4);
+  Eigen::Vector3d J(0,-9,2);
 
-float V_max = 0.5;
+  Eigen::Vector3d K(0,-11,2);
+  Eigen::Vector3d L(0,-14,2);
+  Eigen::Vector3d M(0,-14,4);
+  Eigen::Vector3d N(0,-11,4);
+  Eigen::Vector3d O(0,-11,6);
+  Eigen::Vector3d P(0,-14,6);
+
+  Eigen::Vector3d Q(0,-14,6);
+  Eigen::Vector3d R(0,-14,6);
+  Eigen::Vector3d S(0,-14,6);
+  Eigen::Vector3d Y(0,-14,6);
+
+  float Pos_array[21][3] = {{0,0,2},
+                           {0,0,6},
+                           {0,-2,4},
+                           {0,-4,6},
+                           {0,-4,2},
+                           {0,-6,2},
+                           {0,-6,6},
+                           {0,-9,6},
+                           {0,-9,4},
+                           {0,-6,4},
+                           {0,-9,2},
+                           {0,-11,2},
+                           {0,-14,2},
+                           {0,-14,4},
+                           {0,-11,4},
+                           {0,-11,6},
+                           {0,-14,6},
+                           {0,-14,6},
+                           {0,-14,6},
+                           {0,-14,6},
+                           {0,-14,6},};
+
+  float V_max = 1.0;
   
-  float  tZ = 0;
+  float  tZ = 20;
   float  tA = tZ + (norm_two(A , Z)/V_max);
   float  tB = tA + (norm_two(B , A)/V_max);
   float  tC = tB + (norm_two(C , B)/V_max);
@@ -442,48 +445,56 @@ float V_max = 0.5;
                           {tS},
                           {tY}};
 
-  float tt = IITGN_text_start_time;
+  float tt = MRS_text_start_time;
   ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
+
+
 
   for (int i = 0; i < 21; i++) {
   
-        if (IITGN_text_start_time >= t_array[i][0]){
-          t1_IITGN_traj  = t_array[i][0];
-          t2_IITGN_traj  = t_array[i+1][0];
-          sty_IITGN_traj = Pos_array[i][1];
-          stz_IITGN_traj = Pos_array[i][2];
-          eny_IITGN_traj = Pos_array[i+1][1];
-          enz_IITGN_traj = Pos_array[i+1][2];
+        if (MRS_text_start_time >= t_array[i][0]){
+          t1_MRS_traj  = t_array[i][0];
+          t2_MRS_traj  = t_array[i+1][0];
+          sty_MRS_traj = Pos_array[i][1];
+          stz_MRS_traj = Pos_array[i][2];
+          eny_MRS_traj = Pos_array[i+1][1];
+          enz_MRS_traj = Pos_array[i+1][2];
         }
   }
   
-  // hal.console->printf("%5.3f, %5.3f\n",t1_IITGN_traj,t2_IITGN_traj);
+  // hal.console->printf("%5.3f, %5.3f\n",t1_MRS_traj,t2_MRS_traj);
   
-  float ay =  min_acc_first_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
-  float by = min_acc_second_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
-  float cy =  min_acc_third_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
-  float dy = min_acc_fourth_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) sty_IITGN_traj, (float) eny_IITGN_traj);
+  float ay =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
+  float by = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
+  float cy =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
+  float dy = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
   
-  float az =  min_acc_first_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
-  float bz = min_acc_second_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
-  float cz =  min_acc_third_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
-  float dz = min_acc_fourth_coefficient((float) t1_IITGN_traj, (float) t2_IITGN_traj, (float) stz_IITGN_traj, (float) enz_IITGN_traj);
+  float az =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
+  float bz = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
+  float cz =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
+  float dz = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
   
   des_quad_x = 0.0;
   des_quad_y = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
   des_quad_z = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
   
-  if (IITGN_text_start_time > 92.3101){
-      des_quad_x = 0.0;
-      des_quad_y = 9.0;
-      des_quad_z = 0.0;
+  if (MRS_text_start_time > tY){
+      des_quad_x = P[0];
+      des_quad_y = P[1];
+      des_quad_z = P[2];
+  }
+
+  if (MRS_text_start_time < tZ)
+  {
+    des_quad_x = Z[0];
+    des_quad_y = Z[1];
+    des_quad_z = Z[2];
   }
   ////////////////////////////////////////////////////////////////////////////////////////
 
   ROS_INFO_STREAM_THROTTLE(0.2, "xd:" << des_quad_x);
   ROS_INFO_STREAM_THROTTLE(0.2, "yd:" << des_quad_y);
   ROS_INFO_STREAM_THROTTLE(0.2, "zd:" << des_quad_z);
-
 
   // Desired values of the position
   // des_quad_x = 1.0;
@@ -505,8 +516,8 @@ float V_max = 0.5;
   des_pitch_angle     =   kpx * ( des_quad_x - quad_x) + kdx * ( des_quad_x_dot - quad_x_dot);
   des_roll_angle      = - kpy * ( des_quad_y - quad_y) - kdy * ( des_quad_y_dot - quad_y_dot);
   
-  des_pitch_angle     = clipping_angle(0.35, des_pitch_angle);
-  des_roll_angle      = clipping_angle(0.35, des_roll_angle);
+  des_pitch_angle     = clipping_angle(0.78, des_pitch_angle);
+  des_roll_angle      = clipping_angle(0.78, des_roll_angle);
 
   // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll+angle: " << des_roll_angle);
 

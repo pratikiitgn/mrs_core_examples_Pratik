@@ -3,11 +3,11 @@ desired_pitch:        0.0 # [rad]
 desired_yaw:          0.0 # [rad]
 desired_thrust_force: 0.2 # [N], additional to gravity compensation
 
-kpx_value: 0.1
+kpx_value: 0.2
 kdx_value: 0.135
 
-kpy_value: 0.1
-kdy_value: 0.135
+kpy_value: 0.2
+kdy_value: 0.18
 
-kpz_value: 0.9
-kdz_value: 1.5
+kpz_value: 1.2
+kdz_value: 1.9
