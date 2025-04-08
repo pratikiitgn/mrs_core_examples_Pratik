@@ -489,8 +489,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     des_quad_z = Z[2];
   }
 
-  des_quad_y = 1;
-  des_quad_z = 3;
+  // des_quad_y = 1;
+  // des_quad_z = 3;
 
   ////////////////////////////////////////////////////////////////////////////////////////
 
