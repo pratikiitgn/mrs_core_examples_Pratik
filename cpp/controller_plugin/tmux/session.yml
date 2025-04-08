@@ -12,14 +12,21 @@ windows:
       layout: tiled
       panes:
         - roscore
-  - simulator:
+  # - simulator:
+  #     layout: tiled
+  #     panes:
+  #       - waitForRos; roslaunch mrs_multirotor_simulator multirotor_simulator.launch custom_config:=./config/simulator.yaml
+  - gazebo:
       layout: tiled
       panes:
-        - waitForRos; roslaunch mrs_multirotor_simulator multirotor_simulator.launch custom_config:=./config/simulator.yaml
+        - waitForRos; roslaunch mrs_uav_gazebo_simulation simulation.launch world_name:=grass_plane gui:=true custom_config:=./config/simulator.yaml
+        - waitForGazebo; rosservice call /mrs_drone_spawner/spawn "1 --$UAV_TYPE"
+        - waitForControl; gz camera -c gzclient_camera -f $UAV_NAME; history -s gz camera -c gzclient_camera -f $UAV_NAME
   - hw_api:
       layout: tiled
       panes:
-        - waitForTime; roslaunch mrs_multirotor_simulator hw_api.launch custom_config:=./config/hw_api.yaml
+        # - waitForTime; roslaunch mrs_multirotor_simulator hw_api.launch custom_config:=./config/hw_api.yaml
+        - waitForTime; roslaunch mrs_uav_px4_api api.launch custom_config:=./config/hw_api.yaml
   - takeoff:
       layout: tiled
       panes:
@@ -38,7 +45,7 @@ windows:
       layout: tiled
       panes:
         - waitForHw; roslaunch mrs_uav_core core.launch
-          platform_config:=`rospack find mrs_multirotor_simulator`/config/mrs_uav_system/$UAV_TYPE.yaml
+          platform_config:=`rospack find mrs_uav_gazebo_simulation`/config/mrs_uav_system/$UAV_TYPE.yaml
           custom_config:=./config/custom_config.yaml
           world_config:=./config/world_config.yaml
           network_config:=./config/network_config.yaml
@@ -53,5 +60,8 @@ windows:
       layout: tiled
       panes:
         - waitForControl; sleep 3; ~/.i3/layout_manager.sh ./layout.json
-
+  - goto:
+      layout: tiled
+      panes:
+        - 'history -s rosservice call /$UAV_NAME/control_manager/goto \"goal: \[0.0, 10.0, 1.5, 0.0\]\"'
 
