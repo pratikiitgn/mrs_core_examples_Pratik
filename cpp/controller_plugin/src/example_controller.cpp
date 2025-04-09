@@ -2,6 +2,7 @@
 
 #include <ros/ros.h>
 #include <ros/package.h>
+#include <nodelet/nodelet.h>
 
 #include <pid.hpp>
 
@@ -17,6 +18,14 @@
 // | ----------------- Calling required libraries ----------------- |
 #include <math.h>
 #include <Eigen/Dense>
+
+// | ----------------- Calling required libraries from gazebo ----------------- |
+
+#include <gazebo_msgs/LinkStates.h>
+// #include <gazebo.h>             // for accessing all the gazebo classes
+// #include <gazebo/common/common.h>      // for common function like Modelplugin
+// #include <gazebo/physics/physics.h>      // for common function like Modelplugin
+
 
 // | ----------------- Time related variables ----------------- |
 float MRS_text_start_time = 0.0;
@@ -149,6 +158,10 @@ private:
 
   ros::Time         last_update_time_;
   std::atomic<bool> first_iteration_ = true;
+
+  // | ---------------------- ROS subscribers --------------------- |
+  ros::Subscriber sub_gazebo_pendulum_;
+  void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
   
 };
 
@@ -211,6 +224,9 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("kdy_value", kdy);
   param_loader.loadParam("kpz_value", kpz);
   param_loader.loadParam("kdz_value", kdz);
+
+  // | -------- initialize a subscriber for UAV odometry -------- |
+  sub_gazebo_pendulum_ = nh.subscribe("/gazebo/link_states", 100, &ExampleController::callback_gazebo_pendulum, this, ros::TransportHints().tcpNoDelay());
 
   // | ------------------ finish loading params ----------------- |
 
@@ -331,11 +347,9 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: UAV inertia is: " << detailed_model_params.inertia);
   }
 
-///////////////////////////////////////////////
-///////////////////////////////////////////////
+////////////////////////////////////////////////
 //////         Custom controller starts
-///////////////////////////////////////////////
-///////////////////////////////////////////////
+////////////////////////////////////////////////
 
   // | -------------- prepare the control reference ------------- |
 
@@ -400,7 +414,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
                            {0,-14,6},};
 
   float V_max = 0.5;
-  
+
   float  tZ = 20;
   float  tA = tZ + (norm_two(A , Z)/V_max);
   float  tB = tA + (norm_two(B , A)/V_max);
@@ -466,12 +480,12 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   float by = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
   float cy =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
   float dy = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
-  
+
   float az =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
   float bz = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
   float cz =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
   float dz = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
-  
+
   des_quad_x = 0.0;
   des_quad_y = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
   des_quad_z = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
@@ -489,7 +503,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     des_quad_z = Z[2];
   }
 
-  // des_quad_y = 1;
+  // des_quad_y = 0;
   // des_quad_z = 3;
 
   ////////////////////////////////////////////////////////////////////////////////////////
@@ -514,7 +528,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   // | ---------------- prepare the control output --------------- |
   
-  thrust_force = kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
+  thrust_force        = kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
   des_pitch_angle     =   kpx * ( des_quad_x - quad_x) + kdx * ( des_quad_x_dot - quad_x_dot);
   des_roll_angle      = - kpy * ( des_quad_y - quad_y) - kdy * ( des_quad_y_dot - quad_y_dot);
   
@@ -615,6 +629,17 @@ const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr ExampleController::setC
 // --------------------------------------------------------------
 
 /* //{ callbackDrs() */
+
+void ExampleController::callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg) {
+
+  /* do not continue if the nodelet is not initialized */
+  if (!is_initialized_) {
+    return;
+  }
+  // | --------------  ------------- |
+  // pendulum_position = msg.pose ;
+  
+}
 
 void ExampleController::callbackDrs(example_controller_plugin::example_controllerConfig& config, [[maybe_unused]] uint32_t level) {
 
