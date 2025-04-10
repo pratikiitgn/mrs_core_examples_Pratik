@@ -160,6 +160,7 @@ private:
   std::atomic<bool> first_iteration_ = true;
 
   // | ---------------------- ROS subscribers --------------------- |
+  // ros::Subscriber sub_gazebo_pendulum_;
   ros::Subscriber sub_gazebo_pendulum_;
   void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
   
@@ -225,8 +226,8 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("kpz_value", kpz);
   param_loader.loadParam("kdz_value", kdz);
 
-  // | -------- initialize a subscriber for UAV odometry -------- |
-  sub_gazebo_pendulum_ = nh.subscribe("/gazebo/link_states", 100, &ExampleController::callback_gazebo_pendulum, this, ros::TransportHints().tcpNoDelay());
+  // // | -------- initialize a subscriber -------- |
+  sub_gazebo_pendulum_ = nh_.subscribe("/gazebo/link_states", 1, &ExampleController::callback_gazebo_pendulum, this, ros::TransportHints().tcpNoDelay());
 
   // | ------------------ finish loading params ----------------- |
 
@@ -344,7 +345,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
     mrs_uav_managers::control_manager::DetailedModelParams_t detailed_model_params = common_handlers_->detailed_model_params.value();
 
-    ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: UAV inertia is: " << detailed_model_params.inertia);
+    // ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: UAV inertia is: " << detailed_model_params.inertia);
   }
 
 ////////////////////////////////////////////////
@@ -460,7 +461,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
                           {tY}};
 
   float tt = MRS_text_start_time;
-  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
+  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
 
   for (int i = 0; i < 21; i++) {
   
@@ -503,14 +504,14 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     des_quad_z = Z[2];
   }
 
-  // des_quad_y = 0;
-  // des_quad_z = 3;
-
+  des_quad_y = 0;
+  des_quad_z = 3;
+  
   ////////////////////////////////////////////////////////////////////////////////////////
 
-  ROS_INFO_STREAM_THROTTLE(0.2, "xd:" << des_quad_x);
-  ROS_INFO_STREAM_THROTTLE(0.2, "yd:" << des_quad_y);
-  ROS_INFO_STREAM_THROTTLE(0.2, "zd:" << des_quad_z);
+  // ROS_INFO_STREAM_THROTTLE(0.2, "xd:" << des_quad_x);
+  // ROS_INFO_STREAM_THROTTLE(0.2, "yd:" << des_quad_y);
+  // ROS_INFO_STREAM_THROTTLE(0.2, "zd:" << des_quad_z);
 
   // Desired values of the position
   // des_quad_x = 1.0;
@@ -528,14 +529,14 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   // | ---------------- prepare the control output --------------- |
   
-  thrust_force        = kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
+  thrust_force        =   kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
   des_pitch_angle     =   kpx * ( des_quad_x - quad_x) + kdx * ( des_quad_x_dot - quad_x_dot);
   des_roll_angle      = - kpy * ( des_quad_y - quad_y) - kdy * ( des_quad_y_dot - quad_y_dot);
   
   des_pitch_angle     = clipping_angle(0.78, des_pitch_angle);
   des_roll_angle      = clipping_angle(0.78, des_roll_angle);
 
-  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll_angle: " << des_roll_angle);
+  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll_angle: " << des_roll_angle);
 
   drs_params.roll     = des_roll_angle;
   drs_params.pitch    = des_pitch_angle;
@@ -637,8 +638,13 @@ void ExampleController::callback_gazebo_pendulum(const gazebo_msgs::LinkStates& 
     return;
   }
   // | --------------  ------------- |
-  // pendulum_position = msg.pose ;
   
+  // ROS_DEBUG("[ExampleController]: Pendulum Pos data (%.2f s)!", msg.pose.Point.position.x);
+  
+  // ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: Pendulum data: " << msg.pose[12]);
+  ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: Pendulum data: " << msg.pose[12].position.x);
+
+
 }
 
 void ExampleController::callbackDrs(example_controller_plugin::example_controllerConfig& config, [[maybe_unused]] uint32_t level) {

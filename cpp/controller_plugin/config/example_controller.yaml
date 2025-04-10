@@ -11,3 +11,9 @@ kdy_value: 0.3
 
 kpz_value: 1.2
 kdz_value: 1.9
+
+# rates of timers in Hz
+rate:
+  publish_dist_to_waypoint: 1 # [Hz]
+  publish_reference: 10 # [Hz]
+  check_subscribers: 1 # [Hz]
