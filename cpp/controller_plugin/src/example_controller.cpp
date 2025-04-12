@@ -18,27 +18,37 @@
 // | ----------------- Calling required libraries ----------------- |
 #include <math.h>
 #include <Eigen/Dense>
+#include <Eigen/Geometry>
 
 // | ----------------- Calling required libraries from gazebo ----------------- |
 
 #include <gazebo_msgs/LinkStates.h>
-// #include <gazebo.h>             // for accessing all the gazebo classes
-// #include <gazebo/common/common.h>      // for common function like Modelplugin
-// #include <gazebo/physics/physics.h>      // for common function like Modelplugin
 
+// | ----------------- Basic math variables ----------------- |
+Eigen::Vector3d e1(1.0,0.0,0.0);
+Eigen::Vector3d e2(0.0,1.0,0.0);
+Eigen::Vector3d e3(0.0,0.0,1.0);
+
+// | ----------------- System parameters     ---------------- |
+
+float mq                = 3.5;      // in kgs mass of the quadcopter
+float mp                = 0.1;      // in kgs mass of the payload
+float g_acceleration    = 9.81;     // in m/s^2
+float PI_value          = 3.1415926535;
 
 // | ----------------- Time related variables ----------------- |
 float MRS_text_start_time = 0.0;
 double initial_ros_time_custom_controller = 0.0;
 float t1_MRS_traj = 0.0;
 float t2_MRS_traj = 0.0;
+
 // | ----------------- Position related variables ----------------- |
 float sty_MRS_traj = 0.0;
 float stz_MRS_traj = 0.0;
 float eny_MRS_traj = 0.0;
 float enz_MRS_traj = 0.0;
 
-// | ----------------- State of the system ----------------- |
+// | ----------------- Quadcopter State ----------------- |
 float quad_x      = 0.0;
 float quad_y      = 0.0;
 float quad_z      = 0.0;
@@ -46,6 +56,11 @@ float quad_z      = 0.0;
 float quad_x_dot  = 0.0;
 float quad_y_dot  = 0.0;
 float quad_z_dot  = 0.0;
+
+Eigen::Vector3d   pos_of_quad(0.0,0.0,0.0);
+Eigen::Vector3d   vel_of_quad(0.0,0.0,0.0);
+
+// | ----------------- Desired quadcopter State ----------------- |
 
 float des_quad_x      = 0.0;
 float des_quad_y      = 0.0;
@@ -55,22 +70,65 @@ float des_quad_x_dot  = 0.0;
 float des_quad_y_dot  = 0.0;
 float des_quad_z_dot  = 0.0;
 
+float des_quad_x_dot_dot  = 0.0;
+float des_quad_y_dot_dot  = 0.0;
+float des_quad_z_dot_dot  = 0.0;
+
+Eigen::Vector3d   des_pos_of_quad(0.0,0.0,0.0);
+Eigen::Vector3d   des_vel_of_quad(0.0,0.0,0.0);
+Eigen::Vector3d   des_acc_of_quad(0.0,0.0,0.0);
+
+Eigen::Vector3d b_1_des(1.0,0.0,0.0);
+Eigen::Vector3d b_2_des(0.0,1.0,0.0);
+Eigen::Vector3d b_3_des(0.0,0.0,1.0);
+
+float desired_yaw_angle = 0.0;
+
+Eigen::Vector3d b_1_c(1.0,0.0,0.0);
+
+Eigen::Matrix3d R_quad_attitude;
+Eigen::Vector3d des_rpy;
+// | ----------------- Cable attitude State ----------------- |
+
+Eigen::Vector3d     q (0.0,0.0,-1.0);
+Eigen::Vector3d q_dot (0.0,0.0, 0.0);
+
+// | ----------------- Desired cable attitude State ----------------- |
+
+Eigen::Vector3d     q_d (0.0,0.0,-1.0);
+Eigen::Vector3d q_d_dot (0.0,0.0, 0.0);
+
+// | ----------------- Payload position State ----------------- |
+
+Eigen::Vector3d pos_of_payload(0.0,0.0,0.0);
+
+// | ----------------- Error definition ----------------- |
+Eigen::Vector3d     e_x_q     (0.0,0.0,0.0);
+Eigen::Vector3d     e_x_q_dot (0.0,0.0,0.0);
+
+Eigen::Vector3d     e_q       (0.0,0.0,0.0);
+Eigen::Vector3d     e_q_dot   (0.0,0.0,0.0);
+
 // | ----------------- Custom Gains ----------------- |
 
-float kpx         = 0.0;
-float kdx         = 0.0;
+float kx_1        = 0.0;
+float kx_1_dot    = 0.0;
+float kx_2        = 0.0;
+float kx_2_dot    = 0.0;
+float kx_3        = 0.0;
+float kx_3_dot    = 0.0;
 
-float kpy         = 0.00;
-float kdy         = 0.00;
-
-float kpz         = 0.0;
-float kdz         = 0.0;
+Eigen::Array3d kx(0.0,0.0,0.0);
+Eigen::Array3d kx_dot(0.0,0.0,0.0);
 
 // | ----------------- High level commands ----------------- |
-float des_roll_angle    = 0.0;
-float des_pitch_angle   = 0.0;
-float des_yaw_angle     = 0.0;
-float thrust_force      = 0.01;
+float des_roll_angle        = 0.0;
+float des_pitch_angle       = 0.0;
+float des_yaw_angle         = 0.0;
+double desired_thrust_force = 0.2;
+
+// | ----------------- Thrust force ----------------- |
+Eigen::Vector3d u_control_input(0.0,0.0,0.0);
 
 //}
 
@@ -97,12 +155,15 @@ public:
   ////////////////////////////////////////////////
   //// for custom controller
   ////////////////////////////////////////////////
-  float norm_two(Eigen::Vector3d A, Eigen::Vector3d B);
+  float distance_bt_two_pts(Eigen::Vector3d A, Eigen::Vector3d B);
   float min_acc_first_coefficient(float t1, float t2, float st, float en);
   float min_acc_second_coefficient(float t1, float t2, float st, float en);
   float min_acc_third_coefficient(float t1, float t2, float st, float en);
   float min_acc_fourth_coefficient(float t1, float t2, float st, float en);
   float clipping_angle(float max_value, float current_angle);
+  Eigen::Vector3d Matrix_vector_mul(Eigen::Matrix3d R, Eigen::Vector3d v);
+  float clipping_net_thrust_force(float max_value, float current_thrust);
+  Eigen::Vector3d Rotation_matrix_to_Euler_angle(Eigen::Matrix3d R);
 
   ////////////////////////////////////////////////
   //// for custom controller
@@ -219,12 +280,12 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("desired_pitch", drs_params_.pitch);
   param_loader.loadParam("desired_yaw", drs_params_.yaw);
   param_loader.loadParam("desired_thrust_force", drs_params_.force);
-  param_loader.loadParam("kpx_value", kpx);
-  param_loader.loadParam("kdx_value", kdx);
-  param_loader.loadParam("kpy_value", kpy);
-  param_loader.loadParam("kdy_value", kdy);
-  param_loader.loadParam("kpz_value", kpz);
-  param_loader.loadParam("kdz_value", kdz);
+  param_loader.loadParam("kx_1_value",      kx_1);
+  param_loader.loadParam("kx_1_dot_value",  kx_1_dot);
+  param_loader.loadParam("kx_2_value",      kx_2);
+  param_loader.loadParam("kx_2_dot_value",  kx_2_dot);
+  param_loader.loadParam("kx_3_value",      kx_3);
+  param_loader.loadParam("kx_3_dot_value",  kx_3_dot);
 
   // // | -------- initialize a subscriber -------- |
   sub_gazebo_pendulum_ = nh_.subscribe("/gazebo/link_states", 1, &ExampleController::callback_gazebo_pendulum, this, ros::TransportHints().tcpNoDelay());
@@ -414,29 +475,29 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
                            {0,-14,6},
                            {0,-14,6},};
 
-  float V_max = 0.5;
+  float V_max = 1;
 
   float  tZ = 20;
-  float  tA = tZ + (norm_two(A , Z)/V_max);
-  float  tB = tA + (norm_two(B , A)/V_max);
-  float  tC = tB + (norm_two(C , B)/V_max);
-  float  tD = tC + (norm_two(D , C)/V_max);
-  float  tE = tD + (norm_two(E , D)/V_max);
-  float  tF = tE + (norm_two(FF , E)/V_max);
-  float  tG = tF + (norm_two(G , FF)/V_max);
-  float  tH = tG + (norm_two(H , G)/V_max);
-  float  tI = tH + (norm_two(I , H)/V_max);
-  float  tJ = tI + (norm_two(J , I)/V_max);
-  float  tK = tJ + (norm_two(K , J)/V_max);
-  float  tL = tK + (norm_two(L , K)/V_max);
-  float  tM = tL + (norm_two(M , L)/V_max);
-  float  tN = tM + (norm_two(N , M)/V_max);
-  float  tO = tN + (norm_two(O , N)/V_max);
-  float  tP = tO + (norm_two(P , O)/V_max);
-  float  tQ = tP + (norm_two(Q , P)/V_max);
-  float  tR = tQ + (norm_two(R , Q)/V_max);
-  float  tS = tR + (norm_two(S , R)/V_max);
-  float  tY = tS + (norm_two(Y , S)/V_max);
+  float  tA = tZ + (distance_bt_two_pts(A , Z)/V_max);
+  float  tB = tA + (distance_bt_two_pts(B , A)/V_max);
+  float  tC = tB + (distance_bt_two_pts(C , B)/V_max);
+  float  tD = tC + (distance_bt_two_pts(D , C)/V_max);
+  float  tE = tD + (distance_bt_two_pts(E , D)/V_max);
+  float  tF = tE + (distance_bt_two_pts(FF , E)/V_max);
+  float  tG = tF + (distance_bt_two_pts(G , FF)/V_max);
+  float  tH = tG + (distance_bt_two_pts(H , G)/V_max);
+  float  tI = tH + (distance_bt_two_pts(I , H)/V_max);
+  float  tJ = tI + (distance_bt_two_pts(J , I)/V_max);
+  float  tK = tJ + (distance_bt_two_pts(K , J)/V_max);
+  float  tL = tK + (distance_bt_two_pts(L , K)/V_max);
+  float  tM = tL + (distance_bt_two_pts(M , L)/V_max);
+  float  tN = tM + (distance_bt_two_pts(N , M)/V_max);
+  float  tO = tN + (distance_bt_two_pts(O , N)/V_max);
+  float  tP = tO + (distance_bt_two_pts(P , O)/V_max);
+  float  tQ = tP + (distance_bt_two_pts(Q , P)/V_max);
+  float  tR = tQ + (distance_bt_two_pts(R , Q)/V_max);
+  float  tS = tR + (distance_bt_two_pts(S , R)/V_max);
+  float  tY = tS + (distance_bt_two_pts(Y , S)/V_max);
 
   float t_array[21][1] = {{tZ},
                           {tA},
@@ -475,8 +536,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
         }
   }
   
-  // hal.console->printf("%5.3f, %5.3f\n",t1_MRS_traj,t2_MRS_traj);
-  
   float ay =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
   float by = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
   float cy =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
@@ -487,14 +546,23 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   float cz =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
   float dz = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
 
-  des_quad_x = 0.0;
-  des_quad_y = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
-  des_quad_z = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
-  
+  des_quad_x      = 0.0;
+  des_quad_y      = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
+  des_quad_z      = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
+
+  des_quad_x_dot  = 0;
+  des_quad_y_dot  = 3*ay*tt*tt + 2*by*tt + cy;
+  des_quad_z_dot  = 3*az*tt*tt + 2*bz*tt + cz;
+
   if (MRS_text_start_time > tY){
       des_quad_x = P[0];
       des_quad_y = P[1];
       des_quad_z = P[2];
+
+      des_quad_x_dot  = 0;
+      des_quad_y_dot  = 0;
+      des_quad_z_dot  = 0;
+
   }
 
   if (MRS_text_start_time < tZ)
@@ -502,11 +570,32 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     des_quad_x = Z[0];
     des_quad_y = Z[1];
     des_quad_z = Z[2];
+
+    des_quad_x_dot  = 0;
+    des_quad_y_dot  = 0;
+    des_quad_z_dot  = 0;
   }
 
-  des_quad_y = 0;
-  des_quad_z = 3;
-  
+  // des_quad_x = 0;
+  // des_quad_y = 0;
+  // des_quad_z = 3;
+
+  des_pos_of_quad[0] = des_quad_x;
+  des_pos_of_quad[1] = des_quad_y;
+  des_pos_of_quad[2] = des_quad_z;
+
+  des_vel_of_quad[0] = des_quad_x_dot;
+  des_vel_of_quad[1] = des_quad_y_dot;
+  des_vel_of_quad[2] = des_quad_z_dot;
+
+  des_vel_of_quad[0] = 0.0;
+  des_vel_of_quad[1] = 0.0;
+  des_vel_of_quad[2] = 0.0;
+
+  des_acc_of_quad[0] = des_quad_x_dot_dot;
+  des_acc_of_quad[1] = des_quad_y_dot_dot;
+  des_acc_of_quad[2] = des_quad_z_dot_dot;
+
   ////////////////////////////////////////////////////////////////////////////////////////
 
   // ROS_INFO_STREAM_THROTTLE(0.2, "xd:" << des_quad_x);
@@ -519,34 +608,114 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // des_quad_z = 2.0;
 
   // Getting positional state of the drone
-  quad_x = uav_state.pose.position.x;
-  quad_y = uav_state.pose.position.y;
-  quad_z = uav_state.pose.position.z;
+  pos_of_quad[0] = uav_state.pose.position.x;
+  pos_of_quad[1] = uav_state.pose.position.y;
+  pos_of_quad[2] = uav_state.pose.position.z;
 
-  quad_x_dot = uav_state.velocity.linear.x;
-  quad_y_dot = uav_state.velocity.linear.y;
-  quad_z_dot = uav_state.velocity.linear.z;
+  vel_of_quad[0] = uav_state.velocity.linear.x;
+  vel_of_quad[1] = uav_state.velocity.linear.y;
+  vel_of_quad[2] = uav_state.velocity.linear.z;
+
+  // | ---------------- Get the gains values --------------- |
+
+  kx      << kx_1 ,     kx_2 ,    kx_3;
+  kx_dot  << kx_1_dot , kx_2_dot, kx_3_dot;
+
+  // | ---------------- Error computation --------------- |
+
+  e_x_q       = des_pos_of_quad - pos_of_quad;
+  e_x_q_dot   = des_vel_of_quad - vel_of_quad;
+
+  e_q         = q.cross(q.cross(q_d));
+  e_q_dot     = q_dot - (q_d.cross(q_d_dot)).cross(q);
+
+  // ROS_INFO_STREAM_THROTTLE(0.5, "Just Debugging" << e_q);
 
   // | ---------------- prepare the control output --------------- |
-  
-  thrust_force        =   kpz * ( des_quad_z - quad_z) + kdz * ( des_quad_z_dot - quad_z_dot);
-  des_pitch_angle     =   kpx * ( des_quad_x - quad_x) + kdx * ( des_quad_x_dot - quad_x_dot);
-  des_roll_angle      = - kpy * ( des_quad_y - quad_y) - kdy * ( des_quad_y_dot - quad_y_dot);
-  
-  des_pitch_angle     = clipping_angle(0.78, des_pitch_angle);
-  des_roll_angle      = clipping_angle(0.78, des_roll_angle);
+
+  Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
+  Eigen::Vector3d position_feedback = kx * e_x_q.array();;
+  Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();;
+
+  u_control_input     = position_feedback + velocity_feedback + feed_forward;
+
+  if (u_control_input(2) < 0) {
+    ROS_WARN_THROTTLE(1.0, "[ExampleController]: the calculated downwards desired force is negative (%.2f) -> mitigating flip", u_control_input(2));
+    u_control_input << 0, 0, 1;
+  }
+
+  // Desired quadcopter attitude
+  b_3_des[0]          = u_control_input[0] / u_control_input.norm();
+  b_3_des[1]          = u_control_input[1] / u_control_input.norm();
+  b_3_des[2]          = u_control_input[2] / u_control_input.norm();
+
+  b_1_c[0]            = cosf(desired_yaw_angle/180.0*PI_value);
+  b_1_c[1]            = sinf(desired_yaw_angle/180.0*PI_value);
+  b_1_c[2]            = 0.0;
+
+  b_2_des             = b_3_des.cross(b_1_c);
+  b_1_des             = b_2_des.cross(b_3_des);
+
+  // R_quad_attitude = common::so3transform(b_3_des, b_1_c, drs_params.rotation_type == 1);
+
+  R_quad_attitude <<  b_1_des[0], b_2_des[0], b_3_des[0],
+                      b_1_des[1], b_2_des[1], b_3_des[1],
+                      b_1_des[2], b_2_des[2], b_3_des[2];
+
+  desired_thrust_force     = u_control_input.dot(R_quad_attitude.col(2));
+
+  double throttle          = 0.0;
+
+  if (desired_thrust_force >= 0) {
+    throttle = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model, desired_thrust_force);
+  } else {
+    ROS_WARN_THROTTLE(1.0, "[ExampleController]: just so you know, the desired throttle force is negative (%.2f)", desired_thrust_force);
+  }
+
+  mrs_msgs::HwApiAttitudeCmd attitude_cmd;
+
+  attitude_cmd.stamp       = ros::Time::now();
+  attitude_cmd.orientation = mrs_lib::AttitudeConverter(R_quad_attitude);
+  attitude_cmd.throttle    = throttle;
+
+  // All the back printing codes
+  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: u_control_input: " << "[" << u_control_input[0] << "," << u_control_input[1] <<"," << u_control_input[2] << "]");
+  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: e_x_q: " << "[" << e_x_q[0] << "," << e_x_q[1] <<"," << e_x_q[2] << "]");
+
+  // des_rpy = Rotation_matrix_to_Euler_angle(R_quad_attitude);
+  // ROS_INFO_STREAM_THROTTLE(0.3, "[ExampleController]: desired attitude rpy: " << des_rpy);
+
+  // | ---------------- Thrust saturation --------------- |
+  // As we have considered t650 frame, the maximum thrust thatcan be produced
+  // by each motor is 24.9598
+  // float max_thrust_force;
+  // max_thrust_force    = 24.9598 * 4.0;
+
+  // desired_thrust_force        = clipping_net_thrust_force(max_thrust_force, desired_thrust_force );
+
+  // ROS_INFO_STREAM_THROTTLE(0.3, "[ExampleController]: Net Thrust Force: " << desired_thrust_force);
+
+  // des_roll_angle      = 0.0;
+  // des_pitch_angle     = 0.0;
+  // des_yaw_angle       = 0.0;
+  // des_pitch_angle     = des_rpy[0];
+  // des_roll_angle      = -des_rpy[1];
+  // des_yaw_angle       = des_rpy[2];
+
+  // des_pitch_angle     = clipping_angle(0.78, des_pitch_angle);
+  // des_roll_angle      = clipping_angle(0.78, des_roll_angle);
 
   // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll_angle: " << des_roll_angle);
 
-  drs_params.roll     = des_roll_angle;
-  drs_params.pitch    = des_pitch_angle;
-  drs_params.yaw      = des_yaw_angle;
-  drs_params.force    = thrust_force;
+  // drs_params.roll     = des_roll_angle;
+  // drs_params.pitch    = des_pitch_angle;
+  // drs_params.yaw      = des_yaw_angle;
+  // drs_params.force    = desired_thrust_force;
 
-  mrs_msgs::HwApiAttitudeCmd attitude_cmd;
-  attitude_cmd.orientation = mrs_lib::AttitudeConverter(drs_params.roll, drs_params.pitch, drs_params.yaw);
-  attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
-                                                                             common_handlers_->getMass() * common_handlers_->g + drs_params.force);
+  // mrs_msgs::HwApiAttitudeCmd attitude_cmd;
+  // attitude_cmd.orientation = mrs_lib::AttitudeConverter(drs_params.roll, drs_params.pitch, drs_params.yaw);
+  // attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
+  //                                                                            common_handlers_->getMass() * common_handlers_->g + drs_params.force);
   //////////////////////// Previous code ends ////////////////////////
 
   // | ----------------- set the control output ----------------- |
@@ -642,7 +811,7 @@ void ExampleController::callback_gazebo_pendulum(const gazebo_msgs::LinkStates& 
   // ROS_DEBUG("[ExampleController]: Pendulum Pos data (%.2f s)!", msg.pose.Point.position.x);
   
   // ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: Pendulum data: " << msg.pose[12]);
-  ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: Pendulum data: " << msg.pose[12].position.x);
+  // ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: Pendulum data: " << msg.pose[12].position.x);
 
 
 }
@@ -687,12 +856,42 @@ float ExampleController::clipping_angle(float max_value, float current_angle){
   return current_angle;
 }
 
-float ExampleController::norm_two(Eigen::Vector3d A, Eigen::Vector3d B){
+float ExampleController::clipping_net_thrust_force(float max_value, float current_thrust){
+  if (current_thrust > max_value) // 24.959870582 * 4
+  {
+    current_thrust = max_value;
+  }
+
+  if (current_thrust < 0.0) // 24.959870582 * 4
+  {
+    current_thrust = 0.0;
+  }
+  return current_thrust;
+}
+
+float ExampleController::distance_bt_two_pts(Eigen::Vector3d A, Eigen::Vector3d B){
 
   float norm__  = (A[0] - B[0]) * (A[0] - B[0]) + (A[1] - B[1]) * (A[1] - B[1]) + (A[2] - B[2]) * (A[2] - B[2]);
   norm__ = sqrtf(norm__ );
   return norm__;
 
+}
+
+
+Eigen::Vector3d ExampleController::Matrix_vector_mul(Eigen::Matrix3d R, Eigen::Vector3d v){
+  Eigen::Vector3d mul_vector (R(0,0)*v[0] + R(0,1)*v[1] + R(0,2)*v[2], R(1,0)*v[0] + R(1,1)*v[1] + R(1,2)*v[2],  R(2,0)*v[0] + R(2,1)*v[1] + R(2,2)*v[2]);
+  return mul_vector;
+}
+
+Eigen::Vector3d ExampleController::Rotation_matrix_to_Euler_angle(Eigen::Matrix3d R){
+
+  float sy = sqrtf( R(0,0) * R(0,0) +  R(1,0) * R(1,0) );
+  float ph_des = atan2f(R(2,1) , R(2,2));
+  float th_des = atan2f(-R(2,0), sy);
+  float ps_des = atan2f(R(1,0), R(0,0));
+
+  Eigen::Vector3d des_roll_pitch_yaw(ph_des, th_des, ps_des);
+  return des_roll_pitch_yaw;
 }
 
 //}
