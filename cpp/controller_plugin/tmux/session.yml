@@ -26,7 +26,7 @@ windows:
   - spawn:
         layout: tiled
         panes:
-        - waitForGazebo; rosservice call /mrs_drone_spawner/spawn "1 $UAV_TYPE --enable-rangefinder --enable-pendulum load_mass:=0.1 num_links:=1 chain_length:=1.0 --enable-ground-truth --pos 0 0 3 0"    
+        - waitForGazebo; rosservice call /mrs_drone_spawner/spawn "1 $UAV_TYPE --enable-rangefinder --enable-pendulum load_mass:=0.1 num_links:=10 chain_length:=1.0 --enable-ground-truth --pos 0 0 3 0"    
   - hw_api:
       layout: tiled
       panes:

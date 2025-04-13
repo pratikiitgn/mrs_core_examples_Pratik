@@ -4,11 +4,12 @@
 #include <ros/package.h>
 #include <nodelet/nodelet.h>
 
-#include <pid.hpp>
+// #include <pid.hpp>
 
+/* for loading dynamic parameters while the nodelet is running */
 #include <mrs_uav_managers/controller.h>
-
 #include <dynamic_reconfigure/server.h>
+
 #include <example_controller_plugin/example_controllerConfig.h>
 
 #include <mrs_lib/param_loader.h>
@@ -21,8 +22,13 @@
 #include <Eigen/Geometry>
 
 // | ----------------- Calling required libraries from gazebo ----------------- |
-
 #include <gazebo_msgs/LinkStates.h>
+
+/* for storing information about the state of the uav (position) */
+#include <geometry_msgs/PoseStamped.h>
+#include <geometry_msgs/PointStamped.h>
+
+// #include <rate.h>
 
 // | ----------------- Basic math variables ----------------- |
 Eigen::Vector3d e1(1.0,0.0,0.0);
@@ -49,13 +55,6 @@ float eny_MRS_traj = 0.0;
 float enz_MRS_traj = 0.0;
 
 // | ----------------- Quadcopter State ----------------- |
-float quad_x      = 0.0;
-float quad_y      = 0.0;
-float quad_z      = 0.0;
-
-float quad_x_dot  = 0.0;
-float quad_y_dot  = 0.0;
-float quad_z_dot  = 0.0;
 
 Eigen::Vector3d   pos_of_quad(0.0,0.0,0.0);
 Eigen::Vector3d   vel_of_quad(0.0,0.0,0.0);
@@ -92,6 +91,7 @@ Eigen::Vector3d des_rpy;
 
 Eigen::Vector3d     q (0.0,0.0,-1.0);
 Eigen::Vector3d q_dot (0.0,0.0, 0.0);
+Eigen::Vector3d q_old (0.0,0.0, 0.0);
 
 // | ----------------- Desired cable attitude State ----------------- |
 
@@ -112,14 +112,26 @@ Eigen::Vector3d     e_q_dot   (0.0,0.0,0.0);
 // | ----------------- Custom Gains ----------------- |
 
 float kx_1        = 0.0;
-float kx_1_dot    = 0.0;
 float kx_2        = 0.0;
-float kx_2_dot    = 0.0;
 float kx_3        = 0.0;
+
+float kx_1_dot    = 0.0;
+float kx_2_dot    = 0.0;
 float kx_3_dot    = 0.0;
+
+float kq_1        = 0.0;
+float kq_2        = 0.0;
+float kq_3        = 0.0;
+
+float kq_1_dot    = 0.0;
+float kq_2_dot    = 0.0;
+float kq_3_dot    = 0.0;
 
 Eigen::Array3d kx(0.0,0.0,0.0);
 Eigen::Array3d kx_dot(0.0,0.0,0.0);
+
+Eigen::Array3d kq(0.0,0.0,0.0);
+Eigen::Array3d kq_dot(0.0,0.0,0.0);
 
 // | ----------------- High level commands ----------------- |
 float des_roll_angle        = 0.0;
@@ -128,7 +140,9 @@ float des_yaw_angle         = 0.0;
 double desired_thrust_force = 0.2;
 
 // | ----------------- Thrust force ----------------- |
-Eigen::Vector3d u_control_input(0.0,0.0,0.0);
+Eigen::Vector3d u_control_input (0.0,0.0,0.0);
+Eigen::Vector3d u_cable_input   (0.0,0.0,0.0);
+Eigen::Vector3d u_quad_input    (0.0,0.0,0.0);
 
 //}
 
@@ -224,7 +238,13 @@ private:
   // ros::Subscriber sub_gazebo_pendulum_;
   ros::Subscriber sub_gazebo_pendulum_;
   void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
-  
+
+  // | --------------------- timer callbacks -------------------- |
+  ros::Publisher pub_quad_state_;
+  ros::Publisher pub_desired_quad_state_;
+  ros::Publisher pub_cable_state_;
+  ros::Publisher pub_desired_cable_state_;
+
 };
 
 //}
@@ -281,14 +301,28 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("desired_yaw", drs_params_.yaw);
   param_loader.loadParam("desired_thrust_force", drs_params_.force);
   param_loader.loadParam("kx_1_value",      kx_1);
-  param_loader.loadParam("kx_1_dot_value",  kx_1_dot);
   param_loader.loadParam("kx_2_value",      kx_2);
-  param_loader.loadParam("kx_2_dot_value",  kx_2_dot);
   param_loader.loadParam("kx_3_value",      kx_3);
+  param_loader.loadParam("kx_1_dot_value",  kx_1_dot); 
+  param_loader.loadParam("kx_2_dot_value",  kx_2_dot); 
   param_loader.loadParam("kx_3_dot_value",  kx_3_dot);
 
-  // // | -------- initialize a subscriber -------- |
+  param_loader.loadParam("kq_1_value",      kq_1);
+  param_loader.loadParam("kq_2_value",      kq_2);
+  param_loader.loadParam("kq_3_value",      kq_3);
+  param_loader.loadParam("kq_1_dot_value",  kq_1_dot); 
+  param_loader.loadParam("kq_2_dot_value",  kq_2_dot); 
+  param_loader.loadParam("kq_3_dot_value",  kq_3_dot);
+
+  // | -------- initialize a subscriber -------- |
   sub_gazebo_pendulum_ = nh_.subscribe("/gazebo/link_states", 1, &ExampleController::callback_gazebo_pendulum, this, ros::TransportHints().tcpNoDelay());
+
+  // | -------- initialize a publisher -------- |
+
+  pub_quad_state_           = nh_.advertise<geometry_msgs::Pose>("quad_state_custom",           1000);
+  pub_desired_quad_state_   = nh_.advertise<geometry_msgs::Pose>("desired_quad_state_custom",   1000);
+  pub_cable_state_          = nh_.advertise<geometry_msgs::Pose>("cable_state_custom",          1000);
+  pub_desired_cable_state_  = nh_.advertise<geometry_msgs::Pose>("desired_cable_state_custom",  1000);
 
   // | ------------------ finish loading params ----------------- |
 
@@ -575,9 +609,9 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     des_quad_z_dot  = 0;
   }
 
-  // des_quad_x = 0;
-  // des_quad_y = 0;
-  // des_quad_z = 3;
+  des_quad_x = 1;
+  des_quad_y = 1;
+  des_quad_z = 3;
 
   des_pos_of_quad[0] = des_quad_x;
   des_pos_of_quad[1] = des_quad_y;
@@ -620,6 +654,9 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   kx      << kx_1 ,     kx_2 ,    kx_3;
   kx_dot  << kx_1_dot , kx_2_dot, kx_3_dot;
 
+  kq      << kq_1 ,     kq_2 ,    kq_3;
+  kq_dot  << kq_1_dot , kq_2_dot, kq_3_dot;
+
   // | ---------------- Error computation --------------- |
 
   e_x_q       = des_pos_of_quad - pos_of_quad;
@@ -633,10 +670,13 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- prepare the control output --------------- |
 
   Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
-  Eigen::Vector3d position_feedback = kx * e_x_q.array();;
-  Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();;
+  Eigen::Vector3d position_feedback = kx * e_x_q.array();
+  Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();
 
-  u_control_input     = position_feedback + velocity_feedback + feed_forward;
+  u_quad_input     = position_feedback + velocity_feedback + feed_forward;
+  u_cable_input    = kq * e_q.array()  + kq_dot * e_q_dot.array();
+
+  u_control_input     = u_quad_input + u_cable_input;
 
   if (u_control_input(2) < 0) {
     ROS_WARN_THROTTLE(1.0, "[ExampleController]: the calculated downwards desired force is negative (%.2f) -> mitigating flip", u_control_input(2));
@@ -677,9 +717,12 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   attitude_cmd.orientation = mrs_lib::AttitudeConverter(R_quad_attitude);
   attitude_cmd.throttle    = throttle;
 
-  // All the back printing codes
-  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: u_control_input: " << "[" << u_control_input[0] << "," << u_control_input[1] <<"," << u_control_input[2] << "]");
-  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: e_x_q: " << "[" << e_x_q[0] << "," << e_x_q[1] <<"," << e_x_q[2] << "]");
+  // [main debugs] All the back printing codes
+
+  // ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: u_control_input: " << "[" << u_control_input[0] << "," << u_control_input[1] <<"," << u_control_input[2] << "]");
+  // ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: e_x_q: " << "[" << e_x_q[0] << "," << e_x_q[1] <<"," << e_x_q[2] << "]");
+  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: q: " << "[" << q[0] << "," << q[1] <<"," << q[2] << "]");
+  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: q_dot: " << "[" << q_dot[0] << "," << q_dot[1] <<"," << q_dot[2] << "]");
 
   // des_rpy = Rotation_matrix_to_Euler_angle(R_quad_attitude);
   // ROS_INFO_STREAM_THROTTLE(0.3, "[ExampleController]: desired attitude rpy: " << des_rpy);
@@ -739,6 +782,69 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   last_control_output_.diagnostics.controller = "ExampleController";
 
+  // | ----------------- Publish all the custom topics ---------- |
+
+// (1)  // Publish quadcopter current states
+    geometry_msgs::Pose current_pose;
+    current_pose.position         = uav_state.pose.position;
+    current_pose.orientation      = uav_state.pose.orientation;
+
+          // try {
+          //   pub_quad_state_.publish(current_pose);
+          // }
+          // catch (...) {
+          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_quad_state_.getTopic().c_str());
+          // }
+    // To access it
+    // $ rostopic echo /uav1/control_manager/example_controller/quad_state_custom
+
+// (2)  // Publish quadcopter desired states
+    geometry_msgs::Pose desired_pose;
+    desired_pose.position.x       = des_pos_of_quad[0];
+    desired_pose.position.y       = des_pos_of_quad[1];
+    desired_pose.position.z       = des_pos_of_quad[2];
+    desired_pose.orientation      = mrs_lib::AttitudeConverter(R_quad_attitude);
+
+          // try {
+          //   pub_desired_quad_state_.publish(desired_pose);
+          // }
+          // catch (...) {
+          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_desired_quad_state_.getTopic().c_str());
+          // }
+    // To access it
+    // $ rostopic echo /uav1/control_manager/example_controller/desired_quad_state_custom
+
+// (3)  // Publish current cable  states
+    geometry_msgs::Pose current_cable_attitude;
+    current_cable_attitude.position.x       = q[0];
+    current_cable_attitude.position.y       = q[1];
+    current_cable_attitude.position.z       = q[2];
+
+          // try {
+          //   pub_cable_state_.publish(current_cable_attitude);
+          // }
+          // catch (...) {
+          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_cable_state_.getTopic().c_str());
+          // }
+    // To access it
+    // $ rostopic echo /uav1/control_manager/example_controller/cable_state_custom
+
+// (4)  // Publish desired cable states
+    geometry_msgs::Pose desired_cable_attitude;
+    desired_cable_attitude.position.x       = q[0];
+    desired_cable_attitude.position.y       = q[1];
+    desired_cable_attitude.position.z       = q[2];
+
+          // try {
+          //   pub_desired_cable_state_.publish(desired_cable_attitude);
+          // }
+          // catch (...) {
+          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_desired_cable_state_.getTopic().c_str());
+          // }
+    // To access it
+    // $ rostopic echo /uav1/control_manager/example_controller/desired_cable_state_custom
+
+  // | ----------------- Return last control input ---------- |
   return last_control_output_;
 }
 
@@ -806,12 +912,16 @@ void ExampleController::callback_gazebo_pendulum(const gazebo_msgs::LinkStates& 
     return;
   }
   // | --------------  ------------- |
-  
-  // ROS_DEBUG("[ExampleController]: Pendulum Pos data (%.2f s)!", msg.pose.Point.position.x);
-  
-  // ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: Pendulum data: " << msg.pose[12]);
-  // ROS_INFO_STREAM_THROTTLE(1.0, "[ExampleController]: Pendulum data: " << msg.pose[12].position.x);
 
+  pos_of_payload[0] = msg.pose[12].position.x;
+  pos_of_payload[1] = msg.pose[12].position.y;
+  pos_of_payload[2] = msg.pose[12].position.z;
+
+  q       = pos_of_quad - pos_of_payload;
+
+  q       = q / q.norm();
+  q_dot   = (q - q_old) / 250.0;
+  q_old   = q;
 
 }
 
@@ -892,6 +1002,48 @@ Eigen::Vector3d ExampleController::Rotation_matrix_to_Euler_angle(Eigen::Matrix3
   Eigen::Vector3d des_roll_pitch_yaw(ph_des, th_des, ps_des);
   return des_roll_pitch_yaw;
 }
+
+// void ExampleController::Publisher_QuadState(const mrs_msgs::UavState& uav_state){
+
+//   if (!is_initialized_) {
+//     return;
+//   }
+
+//   geometry_msgs::Pose current_pose;
+//   current_pose.position         = uav_state.pose.position;
+//   current_pose.orientation      = uav_state.pose.orientation;
+
+//   try {
+//     pub_quad_state_.publish(current_pose);
+//   }
+//   catch (...) {
+//     ROS_ERROR("Exception caught during publishing topic %s.", pub_quad_state_.getTopic().c_str());
+//   }
+
+//   ros::spinOnce();
+//   // loop_rate.sleep();
+
+// }
+
+/* timerPublishQuadState() //{ */
+
+// void ExampleController::timerPublishQuadState([[maybe_unused]] const ros::TimerEvent& te, const mrs_msgs::UavState& uav_state) {
+
+//   if (!is_initialized_) {
+//     return;
+//   }
+
+//   geometry_msgs::Pose current_pose;
+//   current_pose.position         = uav_state.pose.position;
+//   current_pose.orientation      = uav_state.pose.orientation;
+
+//   try {
+//     pub_quad_state_.publish(current_pose);
+//   }
+//   catch (...) {
+//     ROS_ERROR("Exception caught during publishing topic %s.", pub_quad_state_.getTopic().c_str());
+//   }
+// }
 
 //}
 
