@@ -475,7 +475,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
                            {0,-14,6},
                            {0,-14,6},};
 
-  float V_max = 1;
+  float V_max = 0.5;
 
   float  tZ = 20;
   float  tA = tZ + (distance_bt_two_pts(A , Z)/V_max);
@@ -562,7 +562,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
       des_quad_x_dot  = 0;
       des_quad_y_dot  = 0;
       des_quad_z_dot  = 0;
-
   }
 
   if (MRS_text_start_time < tZ)

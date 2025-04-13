@@ -20,6 +20,7 @@ mrs_uav_managers:
       failsafe_threshold: 30.0 # [m], position error triggering failsafe land
       odometry_innovation_threshold: 1.5 # [m], position odometry innovation threshold
       human_switchable: true
+      tilt: 60
 
       # which outputs the controller can provide
       outputs:
@@ -38,6 +39,12 @@ mrs_uav_managers:
       "ExampleController",
     ]
 
+    safety:
+
+      tilt_error_disarm:
+        enabled: false
+
+
   uav_manager:
 
     takeoff:
@@ -53,3 +60,8 @@ mrs_uav_managers:
 
     max_height_checking:
       enabled: false
+
+  constraint_manager:
+
+    default_constraints:
+      gps_baro: "fast"
