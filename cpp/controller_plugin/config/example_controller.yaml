@@ -2,3 +2,4 @@ desired_roll:         0.0 # [rad]
 desired_pitch:        0.0 # [rad]
 desired_yaw:          0.0 # [rad]
 desired_thrust_force: 0.2 # [N], additional to gravity compensation
+
