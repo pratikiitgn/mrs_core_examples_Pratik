@@ -22,11 +22,20 @@
 #include <Eigen/Geometry>
 
 // | ----------------- Calling required libraries from gazebo ----------------- |
-#include <gazebo_msgs/LinkStates.h>
+// #include <gazebo_msgs/LinkStates.h>
 
 /* for storing information about the state of the uav (position) */
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PointStamped.h>
+
+// | ----------------- Calling required libraries from custom simulator ----------------- |
+// #include "../multirotor_model_cable_suspended_load.hpp"
+
+#include "/home/mrs/catkin_ws/src/mrs_multirotor_simulator/include/mrs_multirotor_simulator/uav_system/multirotor_model_cable_suspended_load.hpp"
+#include <nav_msgs/Odometry.h>
+
+// Cable-suspended load
+#include <mrs_lib/subscribe_handler.h>
 
 // #include <rate.h>
 
@@ -37,7 +46,7 @@ Eigen::Vector3d e3(0.0,0.0,1.0);
 
 // | ----------------- System parameters     ---------------- |
 
-float mq                = 3.5;      // in kgs mass of the quadcopter
+float mq                = 2.0;      // in kgs mass of the quadcopter
 float mp                = 0.1;      // in kgs mass of the payload
 float g_acceleration    = 9.81;     // in m/s^2
 float PI_value          = 3.1415926535;
@@ -63,7 +72,7 @@ Eigen::Vector3d   vel_of_quad(0.0,0.0,0.0);
 
 float des_quad_x      = 0.0;
 float des_quad_y      = 0.0;
-float des_quad_z      = 2.0;
+float des_quad_z      = 0.0;
 
 float des_quad_x_dot  = 0.0;
 float des_quad_y_dot  = 0.0;
@@ -85,7 +94,7 @@ float desired_yaw_angle = 0.0;
 
 Eigen::Vector3d b_1_c(1.0,0.0,0.0);
 
-Eigen::Matrix3d R_quad_attitude;
+Eigen::Matrix3d R_des;
 Eigen::Vector3d des_rpy;
 // | ----------------- Cable attitude State ----------------- |
 
@@ -137,7 +146,7 @@ Eigen::Array3d kq_dot(0.0,0.0,0.0);
 float des_roll_angle        = 0.0;
 float des_pitch_angle       = 0.0;
 float des_yaw_angle         = 0.0;
-double desired_thrust_force = 0.2;
+double desired_thrust_force = 0.0;
 
 // | ----------------- Thrust force ----------------- |
 Eigen::Vector3d u_control_input (0.0,0.0,0.0);
@@ -177,6 +186,7 @@ public:
   float clipping_angle(float max_value, float current_angle);
   Eigen::Vector3d Matrix_vector_mul(Eigen::Matrix3d R, Eigen::Vector3d v);
   float clipping_net_thrust_force(float max_value, float current_thrust);
+  Eigen::Vector3d clipping_e_x_q(Eigen::Vector3d e_x_q_vector);
   Eigen::Vector3d Rotation_matrix_to_Euler_angle(Eigen::Matrix3d R);
 
   ////////////////////////////////////////////////
@@ -191,7 +201,12 @@ public:
 
   void resetDisturbanceEstimators(void);
 
+  // Cable-suspended load
+  // void callback_quad_state(const nav_msgs::Odometry& msg);
+
   const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr setConstraints(const mrs_msgs::DynamicsConstraintsSrvRequest::ConstPtr& cmd);
+
+  // 
 
 private:
   ros::NodeHandle nh_;
@@ -236,14 +251,13 @@ private:
 
   // | ---------------------- ROS subscribers --------------------- |
   // ros::Subscriber sub_gazebo_pendulum_;
-  ros::Subscriber sub_gazebo_pendulum_;
-  void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
+  // void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
 
   // | --------------------- timer callbacks -------------------- |
-  ros::Publisher pub_quad_state_;
-  ros::Publisher pub_desired_quad_state_;
-  ros::Publisher pub_cable_state_;
-  ros::Publisher pub_desired_cable_state_;
+  // ros::Publisher pub_quad_state_;
+  // ros::Publisher pub_desired_quad_state_;
+  // ros::Publisher pub_cable_state_;
+  // ros::Publisher pub_desired_cable_state_;
 
 };
 
@@ -314,15 +328,18 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("kq_2_dot_value",  kq_2_dot); 
   param_loader.loadParam("kq_3_dot_value",  kq_3_dot);
 
-  // | -------- initialize a subscriber -------- |
-  sub_gazebo_pendulum_ = nh_.subscribe("/gazebo/link_states", 1, &ExampleController::callback_gazebo_pendulum, this, ros::TransportHints().tcpNoDelay());
+  // | ----------------------- subscribers ---------------------- |
+  // ros::Subscriber sh_quad_state;
+  // sh_quad_state = nh_.subscribe("/multirotor_simulator/uav1/odom", 1, &ExampleController::callback_quad_state, this, ros::TransportHints().tcpNoDelay());
+
+  // | ----------------------- subscribers ---------------------- |
 
   // | -------- initialize a publisher -------- |
 
-  pub_quad_state_           = nh_.advertise<geometry_msgs::Pose>("quad_state_custom",           1000);
-  pub_desired_quad_state_   = nh_.advertise<geometry_msgs::Pose>("desired_quad_state_custom",   1000);
-  pub_cable_state_          = nh_.advertise<geometry_msgs::Pose>("cable_state_custom",          1000);
-  pub_desired_cable_state_  = nh_.advertise<geometry_msgs::Pose>("desired_cable_state_custom",  1000);
+  // pub_quad_state_           = nh_.advertise<geometry_msgs::Pose>("quad_state_custom",           1000);
+  // pub_desired_quad_state_   = nh_.advertise<geometry_msgs::Pose>("desired_quad_state_custom",   1000);
+  // pub_cable_state_          = nh_.advertise<geometry_msgs::Pose>("cable_state_custom",          1000);
+  // pub_desired_cable_state_  = nh_.advertise<geometry_msgs::Pose>("desired_cable_state_custom",  1000);
 
   // | ------------------ finish loading params ----------------- |
 
@@ -458,58 +475,58 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- Custom PD Controller for altitude control --------------- |
 
   MRS_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
-  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << MRS_text_start_time);
+  ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << MRS_text_start_time);
 
   ////////////////////////////////////////////////////////////////////////////////////////
   //     Trajectory for tracking MRS Text
   Eigen::Vector3d Z(0,0,2);
   Eigen::Vector3d A(0,0,6);
-  Eigen::Vector3d B(0,-2,4);
-  Eigen::Vector3d C(0,-4,6);
-  Eigen::Vector3d D(0,-4,2);
+  Eigen::Vector3d B(0,2,4);
+  Eigen::Vector3d C(0,4,6);
+  Eigen::Vector3d D(0,4,2);
 
-  Eigen::Vector3d E(0,-6,2);
-  Eigen::Vector3d FF(0,-6,6);
-  Eigen::Vector3d G(0,-9,6);
-  Eigen::Vector3d H(0,-9,4);
-  Eigen::Vector3d I(0,-6,4);
-  Eigen::Vector3d J(0,-9,2);
+  Eigen::Vector3d E(0,6,2);
+  Eigen::Vector3d FF(0,6,6);
+  Eigen::Vector3d G(0,9,6);
+  Eigen::Vector3d H(0,9,4);
+  Eigen::Vector3d I(0,6,4);
+  Eigen::Vector3d J(0,9,2);
 
-  Eigen::Vector3d K(0,-11,2);
-  Eigen::Vector3d L(0,-14,2);
-  Eigen::Vector3d M(0,-14,4);
-  Eigen::Vector3d N(0,-11,4);
-  Eigen::Vector3d O(0,-11,6);
-  Eigen::Vector3d P(0,-14,6);
+  Eigen::Vector3d K(0,11,2);
+  Eigen::Vector3d L(0,14,2);
+  Eigen::Vector3d M(0,14,4);
+  Eigen::Vector3d N(0,11,4);
+  Eigen::Vector3d O(0,11,6);
+  Eigen::Vector3d P(0,14,6);
 
-  Eigen::Vector3d Q(0,-14,6);
-  Eigen::Vector3d R(0,-14,6);
-  Eigen::Vector3d S(0,-14,6);
-  Eigen::Vector3d Y(0,-14,6);
+  Eigen::Vector3d Q(0,14,6);
+  Eigen::Vector3d R(0,14,6);
+  Eigen::Vector3d S(0,14,6);
+  Eigen::Vector3d Y(0,14,6);
 
   float Pos_array[21][3] = {{0,0,2},
                            {0,0,6},
-                           {0,-2,4},
-                           {0,-4,6},
-                           {0,-4,2},
-                           {0,-6,2},
-                           {0,-6,6},
-                           {0,-9,6},
-                           {0,-9,4},
-                           {0,-6,4},
-                           {0,-9,2},
-                           {0,-11,2},
-                           {0,-14,2},
-                           {0,-14,4},
-                           {0,-11,4},
-                           {0,-11,6},
-                           {0,-14,6},
-                           {0,-14,6},
-                           {0,-14,6},
-                           {0,-14,6},
-                           {0,-14,6},};
+                           {0,2,4},
+                           {0,4,6},
+                           {0,4,2},
+                           {0,6,2},
+                           {0,6,6},
+                           {0,9,6},
+                           {0,9,4},
+                           {0,6,4},
+                           {0,9,2},
+                           {0,11,2},
+                           {0,14,2},
+                           {0,14,4},
+                           {0,11,4},
+                           {0,11,6},
+                           {0,14,6},
+                           {0,14,6},
+                           {0,14,6},
+                           {0,14,6},
+                           {0,14,6},};
 
-  float V_max = 0.5;
+  float V_max = 2.0;
 
   float  tZ = 20;
   float  tA = tZ + (distance_bt_two_pts(A , Z)/V_max);
@@ -609,9 +626,17 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     des_quad_z_dot  = 0;
   }
 
-  des_quad_x = 1;
-  des_quad_y = 1;
-  des_quad_z = 3;
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // des_quad_x = 1;
+  // des_quad_y = 1;
+  // des_quad_z = 3;
+
+  // des_quad_x_dot  = 0;
+  // des_quad_y_dot  = 0;
+  // des_quad_z_dot  = 0;
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   des_pos_of_quad[0] = des_quad_x;
   des_pos_of_quad[1] = des_quad_y;
@@ -645,6 +670,19 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   pos_of_quad[1] = uav_state.pose.position.y;
   pos_of_quad[2] = uav_state.pose.position.z;
 
+  Eigen::Quaterniond quad_rot_in_quat(uav_state.pose.orientation.w, uav_state.pose.orientation.x, uav_state.pose.orientation.y, uav_state.pose.orientation.z);
+
+  Eigen::Matrix3d R_curr = mrs_lib::AttitudeConverter(quad_rot_in_quat);
+
+  // ROS_INFO_STREAM_THROTTLE(0.5, "Just Debugging" << R_curr);
+
+  // // quad_rot_in_quat.normalize();
+  // Eigen::Matrix3d quad_R = quad_rot_in_quat.toRotationMatrix();
+
+  // ROS_INFO_STREAM_THROTTLE(0.5, "Just Debugging" << pos_of_quad);
+  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: cable Attitude" << uav_state.cable);
+  // MultirotorModel::State &state;
+
   vel_of_quad[0] = uav_state.velocity.linear.x;
   vel_of_quad[1] = uav_state.velocity.linear.y;
   vel_of_quad[2] = uav_state.velocity.linear.z;
@@ -660,6 +698,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- Error computation --------------- |
 
   e_x_q       = des_pos_of_quad - pos_of_quad;
+  e_x_q       = clipping_e_x_q(e_x_q);
   e_x_q_dot   = des_vel_of_quad - vel_of_quad;
 
   e_q         = q.cross(q.cross(q_d));
@@ -670,13 +709,16 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- prepare the control output --------------- |
 
   Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
+  // Eigen::Vector3d feed_forward      = (mq) * g_acceleration * e3;
+
   Eigen::Vector3d position_feedback = kx * e_x_q.array();
   Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();
 
   u_quad_input     = position_feedback + velocity_feedback + feed_forward;
   u_cable_input    = kq * e_q.array()  + kq_dot * e_q_dot.array();
 
-  u_control_input     = u_quad_input + u_cable_input;
+  u_control_input  = u_quad_input;
+  //  + u_cable_input;
 
   if (u_control_input(2) < 0) {
     ROS_WARN_THROTTLE(1.0, "[ExampleController]: the calculated downwards desired force is negative (%.2f) -> mitigating flip", u_control_input(2));
@@ -695,13 +737,13 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   b_2_des             = b_3_des.cross(b_1_c);
   b_1_des             = b_2_des.cross(b_3_des);
 
-  // R_quad_attitude = common::so3transform(b_3_des, b_1_c, drs_params.rotation_type == 1);
+  // R_des = common::so3transform(b_3_des, b_1_c, drs_params.rotation_type == 1);
 
-  R_quad_attitude <<  b_1_des[0], b_2_des[0], b_3_des[0],
+  R_des <<  b_1_des[0], b_2_des[0], b_3_des[0],
                       b_1_des[1], b_2_des[1], b_3_des[1],
                       b_1_des[2], b_2_des[2], b_3_des[2];
 
-  desired_thrust_force     = u_control_input.dot(R_quad_attitude.col(2));
+  desired_thrust_force     = u_control_input.dot(R_curr.col(2));
 
   double throttle          = 0.0;
 
@@ -714,51 +756,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   mrs_msgs::HwApiAttitudeCmd attitude_cmd;
 
   attitude_cmd.stamp       = ros::Time::now();
-  attitude_cmd.orientation = mrs_lib::AttitudeConverter(R_quad_attitude);
+  attitude_cmd.orientation = mrs_lib::AttitudeConverter(R_des);
   attitude_cmd.throttle    = throttle;
-
-  // [main debugs] All the back printing codes
-
-  // ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: u_control_input: " << "[" << u_control_input[0] << "," << u_control_input[1] <<"," << u_control_input[2] << "]");
-  // ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: e_x_q: " << "[" << e_x_q[0] << "," << e_x_q[1] <<"," << e_x_q[2] << "]");
-  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: q: " << "[" << q[0] << "," << q[1] <<"," << q[2] << "]");
-  ROS_INFO_STREAM_THROTTLE(0.5, "[ExampleController]: q_dot: " << "[" << q_dot[0] << "," << q_dot[1] <<"," << q_dot[2] << "]");
-
-  // des_rpy = Rotation_matrix_to_Euler_angle(R_quad_attitude);
-  // ROS_INFO_STREAM_THROTTLE(0.3, "[ExampleController]: desired attitude rpy: " << des_rpy);
-
-  // | ---------------- Thrust saturation --------------- |
-  // As we have considered t650 frame, the maximum thrust thatcan be produced
-  // by each motor is 24.9598
-  // float max_thrust_force;
-  // max_thrust_force    = 24.9598 * 4.0;
-
-  // desired_thrust_force        = clipping_net_thrust_force(max_thrust_force, desired_thrust_force );
-
-  // ROS_INFO_STREAM_THROTTLE(0.3, "[ExampleController]: Net Thrust Force: " << desired_thrust_force);
-
-  // des_roll_angle      = 0.0;
-  // des_pitch_angle     = 0.0;
-  // des_yaw_angle       = 0.0;
-  // des_pitch_angle     = des_rpy[0];
-  // des_roll_angle      = -des_rpy[1];
-  // des_yaw_angle       = des_rpy[2];
-
-  // des_pitch_angle     = clipping_angle(0.78, des_pitch_angle);
-  // des_roll_angle      = clipping_angle(0.78, des_roll_angle);
-
-  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: des_roll_angle: " << des_roll_angle);
-
-  // drs_params.roll     = des_roll_angle;
-  // drs_params.pitch    = des_pitch_angle;
-  // drs_params.yaw      = des_yaw_angle;
-  // drs_params.force    = desired_thrust_force;
-
-  // mrs_msgs::HwApiAttitudeCmd attitude_cmd;
-  // attitude_cmd.orientation = mrs_lib::AttitudeConverter(drs_params.roll, drs_params.pitch, drs_params.yaw);
-  // attitude_cmd.throttle    = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model,
-  //                                                                            common_handlers_->getMass() * common_handlers_->g + drs_params.force);
-  //////////////////////// Previous code ends ////////////////////////
 
   // | ----------------- set the control output ----------------- |
 
@@ -781,68 +780,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ----------------- fill in the diagnostics ---------------- |
 
   last_control_output_.diagnostics.controller = "ExampleController";
-
-  // | ----------------- Publish all the custom topics ---------- |
-
-// (1)  // Publish quadcopter current states
-    geometry_msgs::Pose current_pose;
-    current_pose.position         = uav_state.pose.position;
-    current_pose.orientation      = uav_state.pose.orientation;
-
-          // try {
-          //   pub_quad_state_.publish(current_pose);
-          // }
-          // catch (...) {
-          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_quad_state_.getTopic().c_str());
-          // }
-    // To access it
-    // $ rostopic echo /uav1/control_manager/example_controller/quad_state_custom
-
-// (2)  // Publish quadcopter desired states
-    geometry_msgs::Pose desired_pose;
-    desired_pose.position.x       = des_pos_of_quad[0];
-    desired_pose.position.y       = des_pos_of_quad[1];
-    desired_pose.position.z       = des_pos_of_quad[2];
-    desired_pose.orientation      = mrs_lib::AttitudeConverter(R_quad_attitude);
-
-          // try {
-          //   pub_desired_quad_state_.publish(desired_pose);
-          // }
-          // catch (...) {
-          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_desired_quad_state_.getTopic().c_str());
-          // }
-    // To access it
-    // $ rostopic echo /uav1/control_manager/example_controller/desired_quad_state_custom
-
-// (3)  // Publish current cable  states
-    geometry_msgs::Pose current_cable_attitude;
-    current_cable_attitude.position.x       = q[0];
-    current_cable_attitude.position.y       = q[1];
-    current_cable_attitude.position.z       = q[2];
-
-          // try {
-          //   pub_cable_state_.publish(current_cable_attitude);
-          // }
-          // catch (...) {
-          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_cable_state_.getTopic().c_str());
-          // }
-    // To access it
-    // $ rostopic echo /uav1/control_manager/example_controller/cable_state_custom
-
-// (4)  // Publish desired cable states
-    geometry_msgs::Pose desired_cable_attitude;
-    desired_cable_attitude.position.x       = q[0];
-    desired_cable_attitude.position.y       = q[1];
-    desired_cable_attitude.position.z       = q[2];
-
-          // try {
-          //   pub_desired_cable_state_.publish(desired_cable_attitude);
-          // }
-          // catch (...) {
-          //   ROS_ERROR("Exception caught during publishing topic %s.", pub_desired_cable_state_.getTopic().c_str());
-          // }
-    // To access it
-    // $ rostopic echo /uav1/control_manager/example_controller/desired_cable_state_custom
 
   // | ----------------- Return last control input ---------- |
   return last_control_output_;
@@ -905,25 +842,14 @@ const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr ExampleController::setC
 
 /* //{ callbackDrs() */
 
-void ExampleController::callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg) {
+// void ExampleController::callback_quad_state(const nav_msgs::Odometry& msg) {
 
-  /* do not continue if the nodelet is not initialized */
-  if (!is_initialized_) {
-    return;
-  }
-  // | --------------  ------------- |
+//   pos_of_quad[0] = msg.pose.pose.position.x;
+//   pos_of_quad[1] = msg.pose.pose.position.y;
+//   pos_of_quad[2] = msg.pose.pose.position.z;
+//   // ROS_INFO_STREAM_THROTTLE(0.5, "From the subscriber" << pos_of_quad);
 
-  pos_of_payload[0] = msg.pose[12].position.x;
-  pos_of_payload[1] = msg.pose[12].position.y;
-  pos_of_payload[2] = msg.pose[12].position.z;
-
-  q       = pos_of_quad - pos_of_payload;
-
-  q       = q / q.norm();
-  q_dot   = (q - q_old) / 250.0;
-  q_old   = q;
-
-}
+// }
 
 void ExampleController::callbackDrs(example_controller_plugin::example_controllerConfig& config, [[maybe_unused]] uint32_t level) {
 
@@ -978,6 +904,19 @@ float ExampleController::clipping_net_thrust_force(float max_value, float curren
   return current_thrust;
 }
 
+Eigen::Vector3d ExampleController::clipping_e_x_q(Eigen::Vector3d e_x_q_vector){
+  float max_error_lim = 1.0;
+  for (int i=0;i<=2;i++){
+    if (e_x_q_vector(i) > max_error_lim ){
+      e_x_q_vector(i) = max_error_lim;
+    }
+    if (e_x_q_vector(i) < -max_error_lim ){
+      e_x_q_vector(i) = -max_error_lim;
+    }
+  return e_x_q_vector;
+}
+}
+
 float ExampleController::distance_bt_two_pts(Eigen::Vector3d A, Eigen::Vector3d B){
 
   float norm__  = (A[0] - B[0]) * (A[0] - B[0]) + (A[1] - B[1]) * (A[1] - B[1]) + (A[2] - B[2]) * (A[2] - B[2]);
@@ -985,7 +924,6 @@ float ExampleController::distance_bt_two_pts(Eigen::Vector3d A, Eigen::Vector3d 
   return norm__;
 
 }
-
 
 Eigen::Vector3d ExampleController::Matrix_vector_mul(Eigen::Matrix3d R, Eigen::Vector3d v){
   Eigen::Vector3d mul_vector (R(0,0)*v[0] + R(0,1)*v[1] + R(0,2)*v[2], R(1,0)*v[0] + R(1,1)*v[1] + R(1,2)*v[2],  R(2,0)*v[0] + R(2,1)*v[1] + R(2,2)*v[2]);

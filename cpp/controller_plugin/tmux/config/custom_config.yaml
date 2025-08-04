@@ -44,14 +44,20 @@ mrs_uav_managers:
       tilt_error_disarm:
         enabled: false
 
-
   uav_manager:
 
     takeoff:
+      during_takeoff:
+        controller: "MpcController"
+        tracker: "LandoffTracker"
       after_takeoff:
         controller: "ExampleController"
 
     midair_activation:
+      during_activation:
+        controller: "MidairActivationController"
+        tracker: "MidairActivationTracker"
+
       after_activation:
         controller: "ExampleController"
 
