@@ -266,8 +266,6 @@ private:
   // ros::Subscriber sub_gazebo_pendulum_;
   // void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
 
-  ros::Subscriber sh_cable_states;
-  sh_cable_states = nh_.subscribe("/multirotor_simulator/uav1/cable_state", 1, &ExampleController::callback_cable_states, this, ros::TransportHints().tcpNoDelay());
 
   // | --------------------- timer callbacks -------------------- |
   // ros::Publisher pub_quad_state_;
@@ -350,6 +348,9 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
 
   // ros::Subscriber sh_user_reference;
   // sh_user_reference = nh_.subscribe("/uav1/control_manager/control_reference", 1, &ExampleController::callback_user_reference, this, ros::TransportHints().tcpNoDelay());
+
+  ros::Subscriber sh_cable_states;
+  sh_cable_states = nh_.subscribe("/multirotor_simulator/uav1/cable_state", 1, &ExampleController::callback_cable_states, this, ros::TransportHints().tcpNoDelay());
 
   // | ----------------------- subscribers ---------------------- |
 
