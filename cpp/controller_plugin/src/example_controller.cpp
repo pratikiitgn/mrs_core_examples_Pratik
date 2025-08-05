@@ -92,7 +92,7 @@ float des_quad_x_dot_dot  = 0.0;
 float des_quad_y_dot_dot  = 0.0;
 float des_quad_z_dot_dot  = 0.0;
 
-Eigen::Vector3d   des_pos_of_quad(0.0,0.0,2.0);
+Eigen::Vector3d   des_pos_of_quad(0.0,0.0,0.0);
 Eigen::Vector3d   des_vel_of_quad(0.0,0.0,0.0);
 Eigen::Vector3d   des_acc_of_quad(0.0,0.0,0.0);
 
@@ -445,7 +445,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   double dt;
 
   if (first_iteration_) {
-    dt               = 0.01;
+    // dt               = 0.01;
+    dt               = 0.004;
     first_iteration_ = false;
   } else {
     dt = (uav_state.header.stamp - last_update_time_).toSec();
@@ -456,7 +457,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   if (fabs(dt) < 0.001) {
 
     ROS_DEBUG("[ExampleController]: the last odometry message came too close (%.2f s)!", dt);
-    dt = 0.01;
+    // dt = 0.01;
+    dt               = 0.004;
   }
 
   // | -------- check for the available output modalities ------- |
@@ -494,6 +496,10 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   des_vel_of_quad[0] = tracker_command.velocity.x;
   des_vel_of_quad[1] = tracker_command.velocity.y;
   des_vel_of_quad[2] = tracker_command.velocity.z;
+
+  des_acc_of_quad[0] = tracker_command.acceleration.x;
+  des_acc_of_quad[1] = tracker_command.acceleration.y;
+  des_acc_of_quad[2] = tracker_command.acceleration.z;
 
   // | ---------------- Custom PD Controller for altitude control --------------- |
 
@@ -727,6 +733,9 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   pos_of_quad[0] = uav_state.pose.position.x;
   pos_of_quad[1] = uav_state.pose.position.y;
   pos_of_quad[2] = uav_state.pose.position.z;
+  vel_of_quad[0] = uav_state.velocity.linear.x;
+  vel_of_quad[1] = uav_state.velocity.linear.y;
+  vel_of_quad[2] = uav_state.velocity.linear.z;
 
   Eigen::Quaterniond quad_rot_in_quat(uav_state.pose.orientation.w, uav_state.pose.orientation.x, uav_state.pose.orientation.y, uav_state.pose.orientation.z);
 
@@ -741,9 +750,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: cable Attitude" << uav_state.cable);
   // MultirotorModel::State &state;
 
-  vel_of_quad[0] = uav_state.velocity.linear.x;
-  vel_of_quad[1] = uav_state.velocity.linear.y;
-  vel_of_quad[2] = uav_state.velocity.linear.z;
+
 
   // | ---------------- Get the gains values --------------- |
 
@@ -756,9 +763,9 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- Error computation --------------- |
 
   e_x_q       = des_pos_of_quad - pos_of_quad;
-  e_x_q       = clipping_e_x_q(e_x_q);
+  // e_x_q       = clipping_e_x_q(e_x_q);
   e_x_q_dot   = des_vel_of_quad - vel_of_quad;
-  e_x_q_dot   = clipping_e_x_q_dot(e_x_q_dot);
+  // e_x_q_dot   = clipping_e_x_q_dot(e_x_q_dot);
 
   // ROS_INFO("x des: %2.2f, y des: %2.2f, z des: %2.2f", des_pos_of_quad(0), des_pos_of_quad(1), des_pos_of_quad(2));
   // ROS_INFO("x pos: %2.2f, y pos: %2.2f, z pos: %2.2f", pos_of_quad(0), pos_of_quad(1), pos_of_quad(2));
@@ -771,24 +778,25 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // ROS_INFO_STREAM_THROTTLE(0.2, "error   :" << e_x_q);
   // ROS_INFO_STREAM_THROTTLE(0.2, "quad pos:" << pos_of_quad);
 
-  e_q         = q.cross(q.cross(q_d));
-  e_q_dot     = q_dot - (q_d.cross(q_d_dot)).cross(q);
-
   // ROS_INFO_STREAM_THROTTLE(0.5, "Just Debugging" << e_q);
 
-  // | ---------------- prepare the control output --------------- |
+  // | ---------------- prepare the quadcopter control output --------------- |
 
   // Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
-  Eigen::Vector3d feed_forward      = mq * g_acceleration * e3;
-
-  Eigen::Vector3d position_feedback = kx * e_x_q.array();
+  Eigen::Vector3d feed_forward      = mq * g_acceleration * e3 + mq * des_acc_of_quad;
+  Eigen::Vector3d position_feedback = kx     * e_x_q.array();
   Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();
 
   u_quad_input     = position_feedback + velocity_feedback + feed_forward;
-  u_cable_input    = kq * e_q.array()  + kq_dot * e_q_dot.array();
 
-  u_control_input  = u_quad_input;
-  //  + u_cable_input;
+  // | ---------------- prepare the cable attitude control output --------------- |
+  e_q               = q.cross(q.cross(q_d));
+  e_q_dot           = q_dot - (q_d.cross(q_d_dot)).cross(q);
+  u_cable_input     = kq * e_q.array()  + kq_dot * e_q_dot.array();
+
+  // | ---------------- prepare the final control output --------------- |
+  u_control_input   = u_quad_input;
+  // u_control_input  = u_quad_input + u_cable_input;
 
   if (u_control_input(2) < 0) {
     ROS_WARN_THROTTLE(1.0, "[ExampleController]: the calculated downwards desired force is negative (%.2f) -> mitigating flip", u_control_input(2));
@@ -798,6 +806,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////// Previous computation ----------------
+
   // // Desired quadcopter attitude
   // b_3_des[0]          = u_control_input[0] / u_control_input.norm();
   // b_3_des[1]          = u_control_input[1] / u_control_input.norm();
@@ -1036,7 +1045,7 @@ float ExampleController::clipping_net_thrust_force(float max_value, float curren
 }
 
 Eigen::Vector3d ExampleController::clipping_e_x_q(Eigen::Vector3d e_x_q_vector){
-  float max_error_lim = 1.0; // in meter
+  float max_error_lim = 10.0; // in meter
   for (int i=0;i<=2;i++){
     if (e_x_q_vector(i) > max_error_lim ){
       e_x_q_vector(i) = max_error_lim;
@@ -1049,7 +1058,7 @@ return e_x_q_vector;
 }
 
 Eigen::Vector3d ExampleController::clipping_e_x_q_dot(Eigen::Vector3d e_x_q_dot_vector){
-  float max_error_lim = 1.0; // in meter per second
+  float max_error_lim = 10.0; // in meter per second
   for (int i=0;i<=2;i++){
     if (e_x_q_dot_vector(i) > max_error_lim ){
       e_x_q_dot_vector(i) = max_error_lim;
