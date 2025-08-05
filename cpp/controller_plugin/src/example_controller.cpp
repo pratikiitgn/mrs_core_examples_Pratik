@@ -763,9 +763,9 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- Error computation --------------- |
 
   e_x_q       = des_pos_of_quad - pos_of_quad;
-  // e_x_q       = clipping_e_x_q(e_x_q);
+  e_x_q       = clipping_e_x_q(e_x_q);
   e_x_q_dot   = des_vel_of_quad - vel_of_quad;
-  // e_x_q_dot   = clipping_e_x_q_dot(e_x_q_dot);
+  e_x_q_dot   = clipping_e_x_q_dot(e_x_q_dot);
 
   // ROS_INFO("x des: %2.2f, y des: %2.2f, z des: %2.2f", des_pos_of_quad(0), des_pos_of_quad(1), des_pos_of_quad(2));
   // ROS_INFO("x pos: %2.2f, y pos: %2.2f, z pos: %2.2f", pos_of_quad(0), pos_of_quad(1), pos_of_quad(2));
@@ -783,7 +783,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- prepare the quadcopter control output --------------- |
 
   // Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
-  Eigen::Vector3d feed_forward      = mq * g_acceleration * e3 + mq * des_acc_of_quad;
+  Eigen::Vector3d feed_forward      = common_handlers->getMass() * g_acceleration * e3 + common_handlers->getMass() * des_acc_of_quad;
   Eigen::Vector3d position_feedback = kx     * e_x_q.array();
   Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();
 
@@ -807,58 +807,58 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////// Previous computation ----------------
 
-  // // Desired quadcopter attitude
-  // b_3_des[0]          = u_control_input[0] / u_control_input.norm();
-  // b_3_des[1]          = u_control_input[1] / u_control_input.norm();
-  // b_3_des[2]          = u_control_input[2] / u_control_input.norm();
+  // Desired quadcopter attitude
+  b_3_des[0]          = u_control_input[0] / u_control_input.norm();
+  b_3_des[1]          = u_control_input[1] / u_control_input.norm();
+  b_3_des[2]          = u_control_input[2] / u_control_input.norm();
 
-  // b_1_c[0]            = cosf(desired_yaw_angle/180.0*PI_value);
-  // b_1_c[1]            = sinf(desired_yaw_angle/180.0*PI_value);
-  // b_1_c[2]            = 0.0;
+  b_1_c[0]            = cosf(desired_yaw_angle/180.0*PI_value);
+  b_1_c[1]            = sinf(desired_yaw_angle/180.0*PI_value);
+  b_1_c[2]            = 0.0;
 
-  // b_2_des             = b_3_des.cross(b_1_c);
-  // b_1_des             = b_2_des.cross(b_3_des);
+  b_2_des             = b_3_des.cross(b_1_c);
+  b_1_des             = b_2_des.cross(b_3_des);
 
-  // R_des <<  b_1_des[0], b_2_des[0], b_3_des[0],
-  //                     b_1_des[1], b_2_des[1], b_3_des[1],
-  //                     b_1_des[2], b_2_des[2], b_3_des[2];
+  R_des <<  b_1_des[0], b_2_des[0], b_3_des[0],
+                      b_1_des[1], b_2_des[1], b_3_des[1],
+                      b_1_des[2], b_2_des[2], b_3_des[2];
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ////////////////// Just try it ----------------
 
-  const Eigen::Vector3d fd_norm = u_control_input.normalized();
+  // const Eigen::Vector3d fd_norm = u_control_input.normalized();
 
-  // | ------------------------- body z ------------------------- |
-  R_des.col(2) = fd_norm;
+  // // | ------------------------- body z ------------------------- |
+  // R_des.col(2) = fd_norm;
 
-  // | ------------------------- body x ------------------------- |
+  // // | ------------------------- body x ------------------------- |
 
-  // construct the oblique projection
-  Eigen::Matrix3d projector_body_z_compl = (Eigen::Matrix3d::Identity(3, 3) - fd_norm * fd_norm.transpose());
+  // // construct the oblique projection
+  // Eigen::Matrix3d projector_body_z_compl = (Eigen::Matrix3d::Identity(3, 3) - fd_norm * fd_norm.transpose());
 
-  // create a basis of the body-z complement subspace
-  Eigen::MatrixXd A_Matrix = Eigen::MatrixXd(3, 2);
-  A_Matrix.col(0)          = projector_body_z_compl.col(0);
-  A_Matrix.col(1)          = projector_body_z_compl.col(1);
+  // // create a basis of the body-z complement subspace
+  // Eigen::MatrixXd A_Matrix = Eigen::MatrixXd(3, 2);
+  // A_Matrix.col(0)          = projector_body_z_compl.col(0);
+  // A_Matrix.col(1)          = projector_body_z_compl.col(1);
 
-  // create the basis of the projection null-space complement
-  Eigen::MatrixXd B_Matrix = Eigen::MatrixXd(3, 2);
-  B_Matrix.col(0)          = Eigen::Vector3d(1, 0, 0);
-  B_Matrix.col(1)          = Eigen::Vector3d(0, 1, 0);
+  // // create the basis of the projection null-space complement
+  // Eigen::MatrixXd B_Matrix = Eigen::MatrixXd(3, 2);
+  // B_Matrix.col(0)          = Eigen::Vector3d(1, 0, 0);
+  // B_Matrix.col(1)          = Eigen::Vector3d(0, 1, 0);
 
-  // oblique projector to <range_basis>
-  Eigen::MatrixXd Bt_A               = B_Matrix.transpose() * A_Matrix;
-  Eigen::MatrixXd Bt_A_pseudoinverse = ((Bt_A.transpose() * Bt_A).inverse()) * Bt_A.transpose();
-  Eigen::MatrixXd oblique_projector  = A_Matrix * Bt_A_pseudoinverse * B_Matrix.transpose();
+  // // oblique projector to <range_basis>
+  // Eigen::MatrixXd Bt_A               = B_Matrix.transpose() * A_Matrix;
+  // Eigen::MatrixXd Bt_A_pseudoinverse = ((Bt_A.transpose() * Bt_A).inverse()) * Bt_A.transpose();
+  // Eigen::MatrixXd oblique_projector  = A_Matrix * Bt_A_pseudoinverse * B_Matrix.transpose();
 
-  R_des.col(0) = oblique_projector * b_1_c;
-  R_des.col(0).normalize();
+  // R_des.col(0) = oblique_projector * b_1_c;
+  // R_des.col(0).normalize();
 
-  // | ------------------------- body y ------------------------- |
+  // // | ------------------------- body y ------------------------- |
 
-  R_des.col(1) = R_des.col(2).cross(R_des.col(0));
-  R_des.col(1).normalize();
+  // R_des.col(1) = R_des.col(2).cross(R_des.col(0));
+  // R_des.col(1).normalize();
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -896,7 +896,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   /// this is used for:
   // * plotting the orientation in the control_refence topic (optional)
   // * checking for attitude control error
-  last_control_output_.desired_orientation = mrs_lib::AttitudeConverter(drs_params.roll, drs_params.pitch, drs_params.yaw);
+  last_control_output_.desired_orientation = mrs_lib::AttitudeConverter(R_des);
 
   /// IMPORANT
   // The acceleration and heading rate in 3D (expressed in the "fcu" frame of reference) that the UAV will actually undergo due to the control action.
@@ -1045,7 +1045,7 @@ float ExampleController::clipping_net_thrust_force(float max_value, float curren
 }
 
 Eigen::Vector3d ExampleController::clipping_e_x_q(Eigen::Vector3d e_x_q_vector){
-  float max_error_lim = 10.0; // in meter
+  float max_error_lim = 1.0; // in meter
   for (int i=0;i<=2;i++){
     if (e_x_q_vector(i) > max_error_lim ){
       e_x_q_vector(i) = max_error_lim;
@@ -1058,7 +1058,7 @@ return e_x_q_vector;
 }
 
 Eigen::Vector3d ExampleController::clipping_e_x_q_dot(Eigen::Vector3d e_x_q_dot_vector){
-  float max_error_lim = 10.0; // in meter per second
+  float max_error_lim = 2.0; // in meter per second
   for (int i=0;i<=2;i++){
     if (e_x_q_dot_vector(i) > max_error_lim ){
       e_x_q_dot_vector(i) = max_error_lim;
