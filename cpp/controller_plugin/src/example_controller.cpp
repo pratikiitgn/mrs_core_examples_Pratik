@@ -349,10 +349,24 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   // ros::Subscriber sh_user_reference;
   // sh_user_reference = nh_.subscribe("/uav1/control_manager/control_reference", 1, &ExampleController::callback_user_reference, this, ros::TransportHints().tcpNoDelay());
 
-  ros::Subscriber sh_cable_states;
-  sh_cable_states = nh_.subscribe("/multirotor_simulator/uav1/cable_state", 1, &ExampleController::callback_cable_states, this, ros::TransportHints().tcpNoDelay());
+  // ros::Subscriber sh_cable_states;
+  // sh_cable_states = nh_.subscribe("/multirotor_simulator/uav1/cable_state", 1, &ExampleController::callback_cable_states, this, ros::TransportHints().tcpNoDelay());
 
   // | ----------------------- subscribers ---------------------- |
+  // | ----------------------- subscribers ---------------------- |
+
+  mrs_lib::SubscribeHandlerOptions shopts;
+  shopts.nh                 = nh;
+  shopts.node_name          = "uav1";
+  shopts.no_message_timeout = mrs_lib::no_timeout;
+  shopts.threadsafe         = true;
+  shopts.autostart          = true;
+  shopts.queue_size         = 10;
+  shopts.transport_hints    = ros::TransportHints().tcpNoDelay();
+
+  mrs_lib::SubscribeHandler<nav_msgs::Odometry>            sh_cable_states;
+
+  sh_cable_states = mrs_lib::SubscribeHandler<nav_msgs::Odometry>(shopts, "/multirotor_simulator/uav1/cable_state", &ExampleController::callback_cable_states, this);
 
   // | -------- initialize a publisher -------- |
 
