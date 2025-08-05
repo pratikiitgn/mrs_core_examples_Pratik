@@ -783,11 +783,12 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // | ---------------- prepare the quadcopter control output --------------- |
 
   // Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
-  Eigen::Vector3d feed_forward      = common_handlers->getMass() * g_acceleration * e3 + common_handlers->getMass() * des_acc_of_quad;
+  // Eigen::Vector3d feed_forward      = _uav_mass_ * g_acceleration * e3 + _uav_mass_ * des_acc_of_quad;
+  Eigen::Vector3d feed_forward      = _uav_mass_ * g_acceleration * e3;
   Eigen::Vector3d position_feedback = kx     * e_x_q.array();
   Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();
 
-  u_quad_input     = position_feedback + velocity_feedback + feed_forward;
+  u_quad_input      = position_feedback + velocity_feedback + feed_forward;
 
   // | ---------------- prepare the cable attitude control output --------------- |
   e_q               = q.cross(q.cross(q_d));
@@ -879,10 +880,18 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     ROS_WARN_THROTTLE(1.0, "[ExampleController]: just so you know, the desired throttle force is negative (%.2f)", desired_thrust_force);
   }
 
+  Eigen::Vector3d des_roll_pitch_yaw = Rotation_matrix_to_Euler_angle(R_des);
+
+  des_roll_pitch_yaw(0) = clipping_angle(0.7,des_roll_pitch_yaw(0));
+  des_roll_pitch_yaw(1) = clipping_angle(0.7,des_roll_pitch_yaw(1));
+
+  ROS_INFO("Roll des: %2.2f, Pitch des: %2.2f, Yaw des: %2.2f", des_roll_pitch_yaw(0), des_roll_pitch_yaw(1), des_roll_pitch_yaw(2));
+
   mrs_msgs::HwApiAttitudeCmd attitude_cmd;
 
   attitude_cmd.stamp       = ros::Time::now();
-  attitude_cmd.orientation = mrs_lib::AttitudeConverter(R_des);
+  // attitude_cmd.orientation = mrs_lib::AttitudeConverter(R_des);
+  attitude_cmd.orientation = mrs_lib::AttitudeConverter(des_roll_pitch_yaw[0],des_roll_pitch_yaw[1],des_roll_pitch_yaw[2]);
   attitude_cmd.throttle    = throttle;
 
   // | ----------------- set the control output ----------------- |
@@ -896,7 +905,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   /// this is used for:
   // * plotting the orientation in the control_refence topic (optional)
   // * checking for attitude control error
-  last_control_output_.desired_orientation = mrs_lib::AttitudeConverter(R_des);
+  // last_control_output_.desired_orientation = mrs_lib::AttitudeConverter(R_des);
+  last_control_output_.desired_orientation = mrs_lib::AttitudeConverter(des_roll_pitch_yaw[0],des_roll_pitch_yaw[1],des_roll_pitch_yaw[2]);
 
   /// IMPORANT
   // The acceleration and heading rate in 3D (expressed in the "fcu" frame of reference) that the UAV will actually undergo due to the control action.
@@ -1058,7 +1068,7 @@ return e_x_q_vector;
 }
 
 Eigen::Vector3d ExampleController::clipping_e_x_q_dot(Eigen::Vector3d e_x_q_dot_vector){
-  float max_error_lim = 2.0; // in meter per second
+  float max_error_lim = 1.0; // in meter per second
   for (int i=0;i<=2;i++){
     if (e_x_q_dot_vector(i) > max_error_lim ){
       e_x_q_dot_vector(i) = max_error_lim;
