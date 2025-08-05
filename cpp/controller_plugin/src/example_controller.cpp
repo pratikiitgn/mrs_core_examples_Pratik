@@ -214,6 +214,7 @@ public:
 
   // Cable-suspended load
   // void callback_quad_state(const nav_msgs::Odometry& msg);
+  void callback_cable_states(const nav_msgs::Odometry& msg);
   void callback_user_reference(const nav_msgs::Odometry& msg);
 
   const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr setConstraints(const mrs_msgs::DynamicsConstraintsSrvRequest::ConstPtr& cmd);
@@ -264,6 +265,9 @@ private:
   // | ---------------------- ROS subscribers --------------------- |
   // ros::Subscriber sub_gazebo_pendulum_;
   // void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
+
+  ros::Subscriber sh_cable_states;
+  sh_cable_states = nh_.subscribe("/multirotor_simulator/uav1/cable_state", 1, &ExampleController::callback_cable_states, this, ros::TransportHints().tcpNoDelay());
 
   // | --------------------- timer callbacks -------------------- |
   // ros::Publisher pub_quad_state_;
@@ -796,8 +800,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   u_cable_input     = kq * e_q.array()  + kq_dot * e_q_dot.array();
 
   // | ---------------- prepare the final control output --------------- |
-  u_control_input   = u_quad_input;
-  // u_control_input  = u_quad_input + u_cable_input;
+  // u_control_input   = u_quad_input;
+  u_control_input  = u_quad_input + u_cable_input;
 
   if (u_control_input(2) < 0) {
     ROS_WARN_THROTTLE(1.0, "[ExampleController]: the calculated downwards desired force is negative (%.2f) -> mitigating flip", u_control_input(2));
@@ -869,13 +873,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   double throttle          = 0.0;
 
   if (desired_thrust_force >= 0) {
-    // throttle = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model, desired_thrust_force);
-    float kf                    = 0.00000027087;
-    float n_motors              = 4;
-    float max_rpm              = 7800;
-    float min_rpm              = 1170;
-
-    throttle = (sqrt(desired_thrust_force / (kf * n_motors)) - min_rpm) / (max_rpm - min_rpm);
+    throttle = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model, desired_thrust_force);
   } else {
     ROS_WARN_THROTTLE(1.0, "[ExampleController]: just so you know, the desired throttle force is negative (%.2f)", desired_thrust_force);
   }
@@ -885,7 +883,7 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   des_roll_pitch_yaw(0) = clipping_angle(0.7,des_roll_pitch_yaw(0));
   des_roll_pitch_yaw(1) = clipping_angle(0.7,des_roll_pitch_yaw(1));
 
-  ROS_INFO("Roll des: %2.2f, Pitch des: %2.2f, Yaw des: %2.2f", des_roll_pitch_yaw(0), des_roll_pitch_yaw(1), des_roll_pitch_yaw(2));
+  // ROS_INFO("Roll des: %2.2f, Pitch des: %2.2f, Yaw des: %2.2f", des_roll_pitch_yaw(0), des_roll_pitch_yaw(1), des_roll_pitch_yaw(2));
 
   mrs_msgs::HwApiAttitudeCmd attitude_cmd;
 
@@ -1000,6 +998,20 @@ const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr ExampleController::setC
 //     ROS_INFO("x des: %2.2f, y des: %2.2f, z des: %2.2f", des_pos_of_quad(0), des_pos_of_quad(1), des_pos_of_quad(2));
 
 // }
+
+void ExampleController::callback_cable_states(const nav_msgs::Odometry& msg) {
+  
+  q(0)      = msg.pose.pose.position.x;
+  q(1)      = msg.pose.pose.position.y;
+  q(2)      = msg.pose.pose.position.z;
+
+  q_dot(0)  = msg.twist.twist.linear.x;
+  q_dot(1)  = msg.twist.twist.linear.y;
+  q_dot(2)  = msg.twist.twist.linear.z;
+
+  ROS_INFO("q1: %2.2f, q2: %2.2f, q3: %2.2f", q(0), q(1), q(2));
+
+}
 
 void ExampleController::callbackDrs(example_controller_plugin::example_controllerConfig& config, [[maybe_unused]] uint32_t level) {
 
