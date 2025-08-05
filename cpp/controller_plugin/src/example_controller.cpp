@@ -54,14 +54,24 @@ float PI_value          = 3.1415926535;
 // | ----------------- Time related variables ----------------- |
 float MRS_text_start_time = 0.0;
 double initial_ros_time_custom_controller = 0.0;
+
 float t1_MRS_traj = 0.0;
 float t2_MRS_traj = 0.0;
 
-// | ----------------- Position related variables ----------------- |
+float t1_straight_traj = 0.0;
+float t2_straight_traj = 0.0;
+
+// | ----------------- Position related variables for MRS text ----------------- |
 float sty_MRS_traj = 0.0;
 float stz_MRS_traj = 0.0;
 float eny_MRS_traj = 0.0;
 float enz_MRS_traj = 0.0;
+
+// | ----------------- Position related variables for Striaght Line ----------------- |
+float sty_straight_traj = 0.0;
+float stz_straight_traj = 0.0;
+float eny_straight_traj = 0.0;
+float enz_straight_traj = 0.0;
 
 // | ----------------- Quadcopter State ----------------- |
 
@@ -82,7 +92,7 @@ float des_quad_x_dot_dot  = 0.0;
 float des_quad_y_dot_dot  = 0.0;
 float des_quad_z_dot_dot  = 0.0;
 
-Eigen::Vector3d   des_pos_of_quad(0.0,0.0,0.0);
+Eigen::Vector3d   des_pos_of_quad(0.0,0.0,2.0);
 Eigen::Vector3d   des_vel_of_quad(0.0,0.0,0.0);
 Eigen::Vector3d   des_acc_of_quad(0.0,0.0,0.0);
 
@@ -187,6 +197,7 @@ public:
   Eigen::Vector3d Matrix_vector_mul(Eigen::Matrix3d R, Eigen::Vector3d v);
   float clipping_net_thrust_force(float max_value, float current_thrust);
   Eigen::Vector3d clipping_e_x_q(Eigen::Vector3d e_x_q_vector);
+  Eigen::Vector3d clipping_e_x_q_dot(Eigen::Vector3d e_x_q_dot_vector);
   Eigen::Vector3d Rotation_matrix_to_Euler_angle(Eigen::Matrix3d R);
 
   ////////////////////////////////////////////////
@@ -203,6 +214,7 @@ public:
 
   // Cable-suspended load
   // void callback_quad_state(const nav_msgs::Odometry& msg);
+  void callback_user_reference(const nav_msgs::Odometry& msg);
 
   const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr setConstraints(const mrs_msgs::DynamicsConstraintsSrvRequest::ConstPtr& cmd);
 
@@ -331,6 +343,9 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   // | ----------------------- subscribers ---------------------- |
   // ros::Subscriber sh_quad_state;
   // sh_quad_state = nh_.subscribe("/multirotor_simulator/uav1/odom", 1, &ExampleController::callback_quad_state, this, ros::TransportHints().tcpNoDelay());
+
+  // ros::Subscriber sh_user_reference;
+  // sh_user_reference = nh_.subscribe("/uav1/control_manager/control_reference", 1, &ExampleController::callback_user_reference, this, ros::TransportHints().tcpNoDelay());
 
   // | ----------------------- subscribers ---------------------- |
 
@@ -472,165 +487,223 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   position_reference.pose.position    = tracker_command.position;
   position_reference.pose.orientation = mrs_lib::AttitudeConverter(0, 0, 0).setHeading(tracker_command.heading);
 
+  des_pos_of_quad[0] = tracker_command.position.x;
+  des_pos_of_quad[1] = tracker_command.position.y;
+  des_pos_of_quad[2] = tracker_command.position.z;
+
+  des_vel_of_quad[0] = tracker_command.velocity.x;
+  des_vel_of_quad[1] = tracker_command.velocity.y;
+  des_vel_of_quad[2] = tracker_command.velocity.z;
+
   // | ---------------- Custom PD Controller for altitude control --------------- |
 
   MRS_text_start_time = ros::Time::now().toSec() - initial_ros_time_custom_controller;
   ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << MRS_text_start_time);
 
-  ////////////////////////////////////////////////////////////////////////////////////////
-  //     Trajectory for tracking MRS Text
-  Eigen::Vector3d Z(0,0,2);
-  Eigen::Vector3d A(0,0,6);
-  Eigen::Vector3d B(0,2,4);
-  Eigen::Vector3d C(0,4,6);
-  Eigen::Vector3d D(0,4,2);
 
-  Eigen::Vector3d E(0,6,2);
-  Eigen::Vector3d FF(0,6,6);
-  Eigen::Vector3d G(0,9,6);
-  Eigen::Vector3d H(0,9,4);
-  Eigen::Vector3d I(0,6,4);
-  Eigen::Vector3d J(0,9,2);
+////////////////////////////////////////////////////////////////////////////////////////
+////////////   Trajectory for tracking MRS Text
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // Eigen::Vector3d Z(0,0,2);
+  // Eigen::Vector3d A(0,0,6);
+  // Eigen::Vector3d B(0,2,4);
+  // Eigen::Vector3d C(0,4,6);
+  // Eigen::Vector3d D(0,4,2);
 
-  Eigen::Vector3d K(0,11,2);
-  Eigen::Vector3d L(0,14,2);
-  Eigen::Vector3d M(0,14,4);
-  Eigen::Vector3d N(0,11,4);
-  Eigen::Vector3d O(0,11,6);
-  Eigen::Vector3d P(0,14,6);
+  // Eigen::Vector3d E(0,6,2);
+  // Eigen::Vector3d FF(0,6,6);
+  // Eigen::Vector3d G(0,9,6);
+  // Eigen::Vector3d H(0,9,4);
+  // Eigen::Vector3d I(0,6,4);
+  // Eigen::Vector3d J(0,9,2);
 
-  Eigen::Vector3d Q(0,14,6);
-  Eigen::Vector3d R(0,14,6);
-  Eigen::Vector3d S(0,14,6);
-  Eigen::Vector3d Y(0,14,6);
+  // Eigen::Vector3d K(0,11,2);
+  // Eigen::Vector3d L(0,14,2);
+  // Eigen::Vector3d M(0,14,4);
+  // Eigen::Vector3d N(0,11,4);
+  // Eigen::Vector3d O(0,11,6);
+  // Eigen::Vector3d P(0,14,6);
 
-  float Pos_array[21][3] = {{0,0,2},
-                           {0,0,6},
-                           {0,2,4},
-                           {0,4,6},
-                           {0,4,2},
-                           {0,6,2},
-                           {0,6,6},
-                           {0,9,6},
-                           {0,9,4},
-                           {0,6,4},
-                           {0,9,2},
-                           {0,11,2},
-                           {0,14,2},
-                           {0,14,4},
-                           {0,11,4},
-                           {0,11,6},
-                           {0,14,6},
-                           {0,14,6},
-                           {0,14,6},
-                           {0,14,6},
-                           {0,14,6},};
+  // Eigen::Vector3d Q(0,14,6);
+  // Eigen::Vector3d R(0,14,6);
+  // Eigen::Vector3d S(0,14,6);
+  // Eigen::Vector3d Y(0,14,6);
 
-  float V_max = 2.0;
+  // float Pos_array[21][3] = {{0,0,2},
+  //                          {0,0,6},
+  //                          {0,2,4},
+  //                          {0,4,6},
+  //                          {0,4,2},
+  //                          {0,6,2},
+  //                          {0,6,6},
+  //                          {0,9,6},
+  //                          {0,9,4},
+  //                          {0,6,4},
+  //                          {0,9,2},
+  //                          {0,11,2},
+  //                          {0,14,2},
+  //                          {0,14,4},
+  //                          {0,11,4},
+  //                          {0,11,6},
+  //                          {0,14,6},
+  //                          {0,14,6},
+  //                          {0,14,6},
+  //                          {0,14,6},
+  //                          {0,14,6},};
 
-  float  tZ = 20;
-  float  tA = tZ + (distance_bt_two_pts(A , Z)/V_max);
-  float  tB = tA + (distance_bt_two_pts(B , A)/V_max);
-  float  tC = tB + (distance_bt_two_pts(C , B)/V_max);
-  float  tD = tC + (distance_bt_two_pts(D , C)/V_max);
-  float  tE = tD + (distance_bt_two_pts(E , D)/V_max);
-  float  tF = tE + (distance_bt_two_pts(FF , E)/V_max);
-  float  tG = tF + (distance_bt_two_pts(G , FF)/V_max);
-  float  tH = tG + (distance_bt_two_pts(H , G)/V_max);
-  float  tI = tH + (distance_bt_two_pts(I , H)/V_max);
-  float  tJ = tI + (distance_bt_two_pts(J , I)/V_max);
-  float  tK = tJ + (distance_bt_two_pts(K , J)/V_max);
-  float  tL = tK + (distance_bt_two_pts(L , K)/V_max);
-  float  tM = tL + (distance_bt_two_pts(M , L)/V_max);
-  float  tN = tM + (distance_bt_two_pts(N , M)/V_max);
-  float  tO = tN + (distance_bt_two_pts(O , N)/V_max);
-  float  tP = tO + (distance_bt_two_pts(P , O)/V_max);
-  float  tQ = tP + (distance_bt_two_pts(Q , P)/V_max);
-  float  tR = tQ + (distance_bt_two_pts(R , Q)/V_max);
-  float  tS = tR + (distance_bt_two_pts(S , R)/V_max);
-  float  tY = tS + (distance_bt_two_pts(Y , S)/V_max);
+  // float V_max = 2.0;
 
-  float t_array[21][1] = {{tZ},
-                          {tA},
-                          {tB},
-                          {tC},
-                          {tD},
-                          {tE},
-                          {tF},
-                          {tG},
-                          {tH},
-                          {tI},
-                          {tJ},
-                          {tK},
-                          {tL},
-                          {tM},
-                          {tN},
-                          {tO},
-                          {tP},
-                          {tQ},
-                          {tR},
-                          {tS},
-                          {tY}};
+  // float  tZ = 20;
+  // float  tA = tZ + (distance_bt_two_pts(A , Z)/V_max);
+  // float  tB = tA + (distance_bt_two_pts(B , A)/V_max);
+  // float  tC = tB + (distance_bt_two_pts(C , B)/V_max);
+  // float  tD = tC + (distance_bt_two_pts(D , C)/V_max);
+  // float  tE = tD + (distance_bt_two_pts(E , D)/V_max);
+  // float  tF = tE + (distance_bt_two_pts(FF , E)/V_max);
+  // float  tG = tF + (distance_bt_two_pts(G , FF)/V_max);
+  // float  tH = tG + (distance_bt_two_pts(H , G)/V_max);
+  // float  tI = tH + (distance_bt_two_pts(I , H)/V_max);
+  // float  tJ = tI + (distance_bt_two_pts(J , I)/V_max);
+  // float  tK = tJ + (distance_bt_two_pts(K , J)/V_max);
+  // float  tL = tK + (distance_bt_two_pts(L , K)/V_max);
+  // float  tM = tL + (distance_bt_two_pts(M , L)/V_max);
+  // float  tN = tM + (distance_bt_two_pts(N , M)/V_max);
+  // float  tO = tN + (distance_bt_two_pts(O , N)/V_max);
+  // float  tP = tO + (distance_bt_two_pts(P , O)/V_max);
+  // float  tQ = tP + (distance_bt_two_pts(Q , P)/V_max);
+  // float  tR = tQ + (distance_bt_two_pts(R , Q)/V_max);
+  // float  tS = tR + (distance_bt_two_pts(S , R)/V_max);
+  // float  tY = tS + (distance_bt_two_pts(Y , S)/V_max);
 
-  float tt = MRS_text_start_time;
-  // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: Current Time: " << tt);
+  // float t_array[21][1] = {{tZ}, {tA}, {tB}, {tC}, {tD}, {tE}, {tF},  {tG}, {tH}, {tI}, {tJ}, {tK}, {tL}, {tM}, {tN}, {tO}, {tP}, {tQ}, {tR}, {tS}, {tY}};
 
-  for (int i = 0; i < 21; i++) {
+  // float tt = MRS_text_start_time;
+
+  // for (int i = 0; i < 21; i++) {
   
-        if (MRS_text_start_time >= t_array[i][0]){
-          t1_MRS_traj  = t_array[i][0];
-          t2_MRS_traj  = t_array[i+1][0];
-          sty_MRS_traj = Pos_array[i][1];
-          stz_MRS_traj = Pos_array[i][2];
-          eny_MRS_traj = Pos_array[i+1][1];
-          enz_MRS_traj = Pos_array[i+1][2];
-        }
-  }
+  //       if (MRS_text_start_time >= t_array[i][0]){
+  //         t1_MRS_traj  = t_array[i][0];
+  //         t2_MRS_traj  = t_array[i+1][0];
+  //         sty_MRS_traj = Pos_array[i][1];
+  //         stz_MRS_traj = Pos_array[i][2];
+  //         eny_MRS_traj = Pos_array[i+1][1];
+  //         enz_MRS_traj = Pos_array[i+1][2];
+  //       }
+  // }
   
-  float ay =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
-  float by = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
-  float cy =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
-  float dy = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
+  // float ay =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
+  // float by = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
+  // float cy =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
+  // float dy = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) sty_MRS_traj, (float) eny_MRS_traj);
 
-  float az =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
-  float bz = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
-  float cz =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
-  float dz = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
+  // float az =  min_acc_first_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
+  // float bz = min_acc_second_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
+  // float cz =  min_acc_third_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
+  // float dz = min_acc_fourth_coefficient((float) t1_MRS_traj, (float) t2_MRS_traj, (float) stz_MRS_traj, (float) enz_MRS_traj);
 
-  des_quad_x      = 0.0;
-  des_quad_y      = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
-  des_quad_z      = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
+  // des_quad_x      = 0.0;
+  // des_quad_y      = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
+  // des_quad_z      = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
 
-  des_quad_x_dot  = 0;
-  des_quad_y_dot  = 3*ay*tt*tt + 2*by*tt + cy;
-  des_quad_z_dot  = 3*az*tt*tt + 2*bz*tt + cz;
+  // des_quad_x_dot  = 0;
+  // des_quad_y_dot  = 3*ay*tt*tt + 2*by*tt + cy;
+  // des_quad_z_dot  = 3*az*tt*tt + 2*bz*tt + cz;
 
-  if (MRS_text_start_time > tY){
-      des_quad_x = P[0];
-      des_quad_y = P[1];
-      des_quad_z = P[2];
+  // if (MRS_text_start_time > tY){
+  //     des_quad_x = P[0];
+  //     des_quad_y = P[1];
+  //     des_quad_z = P[2];
 
-      des_quad_x_dot  = 0;
-      des_quad_y_dot  = 0;
-      des_quad_z_dot  = 0;
-  }
+  //     des_quad_x_dot  = 0;
+  //     des_quad_y_dot  = 0;
+  //     des_quad_z_dot  = 0;
+  // }
 
-  if (MRS_text_start_time < tZ)
-  {
-    des_quad_x = Z[0];
-    des_quad_y = Z[1];
-    des_quad_z = Z[2];
+  // if (MRS_text_start_time < tZ)
+  // {
+  //   des_quad_x = Z[0];
+  //   des_quad_y = Z[1];
+  //   des_quad_z = Z[2];
 
-    des_quad_x_dot  = 0;
-    des_quad_y_dot  = 0;
-    des_quad_z_dot  = 0;
-  }
+  //   des_quad_x_dot  = 0;
+  //   des_quad_y_dot  = 0;
+  //   des_quad_z_dot  = 0;
+  // }
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////   Just a Straight Line
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  // Eigen::Vector3d straight_line_start_point(0,0,2);
+  // Eigen::Vector3d straight_line_end_point(0,8,2);
+
+  // sty_straight_traj = straight_line_start_point(1);
+  // stz_straight_traj = straight_line_start_point(2);
+
+  // eny_straight_traj = straight_line_end_point(1);
+  // enz_straight_traj = straight_line_end_point(2);
+
+  // float straight_line_V_Max = 2;
+
+  // t1_straight_traj  = 25;
+  // t2_straight_traj  = t1_straight_traj + (distance_bt_two_pts(straight_line_start_point , straight_line_end_point)/straight_line_V_Max);
+
+  // if (MRS_text_start_time < t1_straight_traj)
+  // {
+  //   des_quad_x      = 0.0;
+  //   des_quad_y      = sty_straight_traj;
+  //   des_quad_z      = stz_straight_traj;
+
+  //   des_quad_x_dot  = 0;
+  //   des_quad_y_dot  = 0;
+  //   des_quad_z_dot  = 0;
+  // }
+
+  // if (MRS_text_start_time >= t1_straight_traj && MRS_text_start_time <= t2_straight_traj){
+
+  //   float ay =  min_acc_first_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) sty_straight_traj, (float) eny_straight_traj);
+  //   float by = min_acc_second_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) sty_straight_traj, (float) eny_straight_traj);
+  //   float cy =  min_acc_third_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) sty_straight_traj, (float) eny_straight_traj);
+  //   float dy = min_acc_fourth_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) sty_straight_traj, (float) eny_straight_traj);
+
+  //   float az =  min_acc_first_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) stz_straight_traj, (float) enz_straight_traj);
+  //   float bz = min_acc_second_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) stz_straight_traj, (float) enz_straight_traj);
+  //   float cz =  min_acc_third_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) stz_straight_traj, (float) enz_straight_traj);
+  //   float dz = min_acc_fourth_coefficient((float) t1_straight_traj, (float) t2_straight_traj, (float) stz_straight_traj, (float) enz_straight_traj);
+
+  //   des_quad_x      = 0.0;
+  //   des_quad_y      = ay*tt*tt*tt + by*tt*tt + cy*tt + dy;
+  //   des_quad_z      = az*tt*tt*tt + bz*tt*tt + cz*tt + dz;
+
+  //   des_quad_x_dot  = 0;
+  //   des_quad_y_dot  = 3*ay*tt*tt + 2*by*tt + cy;
+  //   des_quad_z_dot  = 3*az*tt*tt + 2*bz*tt + cz;
+  // }
+
+  // if (MRS_text_start_time > t2_straight_traj)
+  // {
+  //   des_quad_x      = 0.0;
+  //   des_quad_y      = eny_straight_traj;
+  //   des_quad_z      = enz_straight_traj;
+
+  //   des_quad_x_dot  = 0;
+  //   des_quad_y_dot  = 0;
+  //   des_quad_z_dot  = 0;
+  // }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  // des_quad_x = 1;
-  // des_quad_y = 1;
-  // des_quad_z = 3;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////   From Keyboard
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////   Static Point for Stabilization
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  // des_quad_x = 0;
+  // des_quad_y = 10;
+  // des_quad_z = 2;
 
   // des_quad_x_dot  = 0;
   // des_quad_y_dot  = 0;
@@ -638,32 +711,17 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  des_pos_of_quad[0] = des_quad_x;
-  des_pos_of_quad[1] = des_quad_y;
-  des_pos_of_quad[2] = des_quad_z;
+  // des_pos_of_quad[0] = des_quad_x;
+  // des_pos_of_quad[1] = des_quad_y;
+  // des_pos_of_quad[2] = des_quad_z;
 
-  des_vel_of_quad[0] = des_quad_x_dot;
-  des_vel_of_quad[1] = des_quad_y_dot;
-  des_vel_of_quad[2] = des_quad_z_dot;
+  // des_vel_of_quad[0] = des_quad_x_dot;
+  // des_vel_of_quad[1] = des_quad_y_dot;
+  // des_vel_of_quad[2] = des_quad_z_dot;
 
-  des_vel_of_quad[0] = 0.0;
-  des_vel_of_quad[1] = 0.0;
-  des_vel_of_quad[2] = 0.0;
-
-  des_acc_of_quad[0] = des_quad_x_dot_dot;
-  des_acc_of_quad[1] = des_quad_y_dot_dot;
-  des_acc_of_quad[2] = des_quad_z_dot_dot;
-
-  ////////////////////////////////////////////////////////////////////////////////////////
-
-  // ROS_INFO_STREAM_THROTTLE(0.2, "xd:" << des_quad_x);
-  // ROS_INFO_STREAM_THROTTLE(0.2, "yd:" << des_quad_y);
-  // ROS_INFO_STREAM_THROTTLE(0.2, "zd:" << des_quad_z);
-
-  // Desired values of the position
-  // des_quad_x = 1.0;
-  // des_quad_y = 1.0;
-  // des_quad_z = 2.0;
+  // des_acc_of_quad[0] = des_quad_x_dot_dot;
+  // des_acc_of_quad[1] = des_quad_y_dot_dot;
+  // des_acc_of_quad[2] = des_quad_z_dot_dot;
 
   // Getting positional state of the drone
   pos_of_quad[0] = uav_state.pose.position.x;
@@ -700,6 +758,18 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   e_x_q       = des_pos_of_quad - pos_of_quad;
   e_x_q       = clipping_e_x_q(e_x_q);
   e_x_q_dot   = des_vel_of_quad - vel_of_quad;
+  e_x_q_dot   = clipping_e_x_q_dot(e_x_q_dot);
+
+  // ROS_INFO("x des: %2.2f, y des: %2.2f, z des: %2.2f", des_pos_of_quad(0), des_pos_of_quad(1), des_pos_of_quad(2));
+  // ROS_INFO("x pos: %2.2f, y pos: %2.2f, z pos: %2.2f", pos_of_quad(0), pos_of_quad(1), pos_of_quad(2));
+  // ROS_INFO("x err: %2.2f, y err: %2.2f, z err: %2.2f", e_x_q(0), e_x_q(1), e_x_q(2));
+  // ROS_INFO("----------------");
+
+  // ROS_INFO_STREAM_THROTTLE(0.2, "x pos:" << pos_of_quad(0) ", y pos:" << pos_of_quad(1) ", z pos:" << pos_of_quad(2));
+  // ROS_INFO_STREAM_THROTTLE(0.2, "x err:" << e_x_q(0) ", y err:" << e_x_q(1) ", z err:" << e_x_q(2));
+
+  // ROS_INFO_STREAM_THROTTLE(0.2, "error   :" << e_x_q);
+  // ROS_INFO_STREAM_THROTTLE(0.2, "quad pos:" << pos_of_quad);
 
   e_q         = q.cross(q.cross(q_d));
   e_q_dot     = q_dot - (q_d.cross(q_d_dot)).cross(q);
@@ -708,8 +778,8 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   // | ---------------- prepare the control output --------------- |
 
-  Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
-  // Eigen::Vector3d feed_forward      = (mq) * g_acceleration * e3;
+  // Eigen::Vector3d feed_forward      = (mq + mp) * g_acceleration * e3;
+  Eigen::Vector3d feed_forward      = mq * g_acceleration * e3;
 
   Eigen::Vector3d position_feedback = kx * e_x_q.array();
   Eigen::Vector3d velocity_feedback = kx_dot * e_x_q_dot.array();
@@ -725,30 +795,77 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
     u_control_input << 0, 0, 1;
   }
 
-  // Desired quadcopter attitude
-  b_3_des[0]          = u_control_input[0] / u_control_input.norm();
-  b_3_des[1]          = u_control_input[1] / u_control_input.norm();
-  b_3_des[2]          = u_control_input[2] / u_control_input.norm();
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////// Previous computation ----------------
+  // // Desired quadcopter attitude
+  // b_3_des[0]          = u_control_input[0] / u_control_input.norm();
+  // b_3_des[1]          = u_control_input[1] / u_control_input.norm();
+  // b_3_des[2]          = u_control_input[2] / u_control_input.norm();
 
-  b_1_c[0]            = cosf(desired_yaw_angle/180.0*PI_value);
-  b_1_c[1]            = sinf(desired_yaw_angle/180.0*PI_value);
-  b_1_c[2]            = 0.0;
+  // b_1_c[0]            = cosf(desired_yaw_angle/180.0*PI_value);
+  // b_1_c[1]            = sinf(desired_yaw_angle/180.0*PI_value);
+  // b_1_c[2]            = 0.0;
 
-  b_2_des             = b_3_des.cross(b_1_c);
-  b_1_des             = b_2_des.cross(b_3_des);
+  // b_2_des             = b_3_des.cross(b_1_c);
+  // b_1_des             = b_2_des.cross(b_3_des);
 
-  // R_des = common::so3transform(b_3_des, b_1_c, drs_params.rotation_type == 1);
+  // R_des <<  b_1_des[0], b_2_des[0], b_3_des[0],
+  //                     b_1_des[1], b_2_des[1], b_3_des[1],
+  //                     b_1_des[2], b_2_des[2], b_3_des[2];
 
-  R_des <<  b_1_des[0], b_2_des[0], b_3_des[0],
-                      b_1_des[1], b_2_des[1], b_3_des[1],
-                      b_1_des[2], b_2_des[2], b_3_des[2];
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////// Just try it ----------------
+
+  const Eigen::Vector3d fd_norm = u_control_input.normalized();
+
+  // | ------------------------- body z ------------------------- |
+  R_des.col(2) = fd_norm;
+
+  // | ------------------------- body x ------------------------- |
+
+  // construct the oblique projection
+  Eigen::Matrix3d projector_body_z_compl = (Eigen::Matrix3d::Identity(3, 3) - fd_norm * fd_norm.transpose());
+
+  // create a basis of the body-z complement subspace
+  Eigen::MatrixXd A_Matrix = Eigen::MatrixXd(3, 2);
+  A_Matrix.col(0)          = projector_body_z_compl.col(0);
+  A_Matrix.col(1)          = projector_body_z_compl.col(1);
+
+  // create the basis of the projection null-space complement
+  Eigen::MatrixXd B_Matrix = Eigen::MatrixXd(3, 2);
+  B_Matrix.col(0)          = Eigen::Vector3d(1, 0, 0);
+  B_Matrix.col(1)          = Eigen::Vector3d(0, 1, 0);
+
+  // oblique projector to <range_basis>
+  Eigen::MatrixXd Bt_A               = B_Matrix.transpose() * A_Matrix;
+  Eigen::MatrixXd Bt_A_pseudoinverse = ((Bt_A.transpose() * Bt_A).inverse()) * Bt_A.transpose();
+  Eigen::MatrixXd oblique_projector  = A_Matrix * Bt_A_pseudoinverse * B_Matrix.transpose();
+
+  R_des.col(0) = oblique_projector * b_1_c;
+  R_des.col(0).normalize();
+
+  // | ------------------------- body y ------------------------- |
+
+  R_des.col(1) = R_des.col(2).cross(R_des.col(0));
+  R_des.col(1).normalize();
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   desired_thrust_force     = u_control_input.dot(R_curr.col(2));
 
   double throttle          = 0.0;
 
   if (desired_thrust_force >= 0) {
-    throttle = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model, desired_thrust_force);
+    // throttle = mrs_lib::quadratic_throttle_model::forceToThrottle(common_handlers_->throttle_model, desired_thrust_force);
+    float kf                    = 0.00000027087;
+    float n_motors              = 4;
+    float max_rpm              = 7800;
+    float min_rpm              = 1170;
+
+    throttle = (sqrt(desired_thrust_force / (kf * n_motors)) - min_rpm) / (max_rpm - min_rpm);
   } else {
     ROS_WARN_THROTTLE(1.0, "[ExampleController]: just so you know, the desired throttle force is negative (%.2f)", desired_thrust_force);
   }
@@ -851,6 +968,20 @@ const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr ExampleController::setC
 
 // }
 
+// void ExampleController::callback_user_reference(const nav_msgs::Odometry& msg) {
+
+//   des_pos_of_quad(0) = msg.pose.pose.position.x;
+//   des_pos_of_quad(1) = msg.pose.pose.position.y;
+//   des_pos_of_quad(2) = msg.pose.pose.position.z;
+
+//   des_vel_of_quad(0) = msg.twist.twist.linear.x;
+//   des_vel_of_quad(1) = msg.twist.twist.linear.y;
+//   des_vel_of_quad(2) = msg.twist.twist.linear.z;
+
+//     ROS_INFO("x des: %2.2f, y des: %2.2f, z des: %2.2f", des_pos_of_quad(0), des_pos_of_quad(1), des_pos_of_quad(2));
+
+// }
+
 void ExampleController::callbackDrs(example_controller_plugin::example_controllerConfig& config, [[maybe_unused]] uint32_t level) {
 
   mrs_lib::set_mutexed(mutex_drs_params_, config, drs_params_);
@@ -905,7 +1036,7 @@ float ExampleController::clipping_net_thrust_force(float max_value, float curren
 }
 
 Eigen::Vector3d ExampleController::clipping_e_x_q(Eigen::Vector3d e_x_q_vector){
-  float max_error_lim = 1.0;
+  float max_error_lim = 1.0; // in meter
   for (int i=0;i<=2;i++){
     if (e_x_q_vector(i) > max_error_lim ){
       e_x_q_vector(i) = max_error_lim;
@@ -913,9 +1044,23 @@ Eigen::Vector3d ExampleController::clipping_e_x_q(Eigen::Vector3d e_x_q_vector){
     if (e_x_q_vector(i) < -max_error_lim ){
       e_x_q_vector(i) = -max_error_lim;
     }
-  return e_x_q_vector;
+  }
+return e_x_q_vector;
 }
+
+Eigen::Vector3d ExampleController::clipping_e_x_q_dot(Eigen::Vector3d e_x_q_dot_vector){
+  float max_error_lim = 1.0; // in meter per second
+  for (int i=0;i<=2;i++){
+    if (e_x_q_dot_vector(i) > max_error_lim ){
+      e_x_q_dot_vector(i) = max_error_lim;
+    }
+    if (e_x_q_dot_vector(i) < -max_error_lim ){
+      e_x_q_dot_vector(i) = -max_error_lim;
+    }
+  }
+return e_x_q_dot_vector;
 }
+
 
 float ExampleController::distance_bt_two_pts(Eigen::Vector3d A, Eigen::Vector3d B){
 
