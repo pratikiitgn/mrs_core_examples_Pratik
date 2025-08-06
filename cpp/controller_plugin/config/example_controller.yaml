@@ -21,21 +21,21 @@ desired_thrust_force: 0.0 # [N], additional to gravity compensation
 # Kp = mass x omega ^ 2 = 2 x 3.6 x 3.6             = 25.92
 # Kd = 2 x mass x zeta x omega = 2 x 2 x 1 x 3.6    = 14.4
 
-kx_1_value:     1.8     # 2.0 # 5.5  # 10.0
-kx_2_value:     1.8     # 2.0 # 5.5  # 10.0
-kx_3_value:     10.0    # 10.0 # 10.0 # 10.0
+kx_1_value:     0.7     # 0.7  # 2.0 # 5.5  # 10.0
+kx_2_value:     0.7     # 0.7  # 2.0 # 5.5  # 10.0
+kx_3_value:     10.0    # 10.0 # 10.0 # 10.0 # 10.0
 
-kx_1_dot_value: 5.0     # 2.8 # 5.0  # 8.0
-kx_2_dot_value: 5.0     # 2.8 # 5.0  # 8.0
-kx_3_dot_value: 8.0     # 8.0 # 8.0  # 8.0
+kx_1_dot_value: 5.5     # 5.5 # 2.8 # 5.0  # 8.0
+kx_2_dot_value: 5.5     # 5.5 # 2.8 # 5.0  # 8.0
+kx_3_dot_value: 10.0    # 10.0  # 8.0 # 8.0  # 8.0
 
-kq_1_value:     100.0
-kq_2_value:     100.0
-kq_3_value:     100.0
+kq_1_value:     5.0
+kq_2_value:     5.0
+kq_3_value:     5.0
 
-kq_1_dot_value: 2.5
-kq_2_dot_value: 2.5
-kq_3_dot_value: 2.5
+kq_1_dot_value: 4.5
+kq_2_dot_value: 4.5
+kq_3_dot_value: 4.5
 
 # rates of timers in Hz
 rate:

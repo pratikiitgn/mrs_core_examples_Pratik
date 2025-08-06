@@ -13,8 +13,13 @@
 #include <example_controller_plugin/example_controllerConfig.h>
 
 #include <mrs_lib/param_loader.h>
+#include <mrs_lib/subscribe_handler.h>
 #include <mrs_lib/mutex.h>
 #include <mrs_lib/attitude_converter.h>
+#include <mrs_lib/msg_extractor.h>
+#include <mrs_lib/geometry/misc.h>
+
+#include <mrs_msgs/ControlManagerDiagnostics.h>
 
 // | ----------------- Calling required libraries ----------------- |
 #include <math.h>
@@ -35,7 +40,6 @@
 #include <nav_msgs/Odometry.h>
 
 // Cable-suspended load
-#include <mrs_lib/subscribe_handler.h>
 
 // #include <rate.h>
 
@@ -212,11 +216,6 @@ public:
 
   void resetDisturbanceEstimators(void);
 
-  // Cable-suspended load
-  // void callback_quad_state(const nav_msgs::Odometry& msg);
-  void callback_cable_states(const nav_msgs::Odometry& msg);
-  void callback_user_reference(const nav_msgs::Odometry& msg);
-
   const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr setConstraints(const mrs_msgs::DynamicsConstraintsSrvRequest::ConstPtr& cmd);
 
   // 
@@ -262,16 +261,11 @@ private:
   ros::Time         last_update_time_;
   std::atomic<bool> first_iteration_ = true;
 
-  // | ---------------------- ROS subscribers --------------------- |
-  // ros::Subscriber sub_gazebo_pendulum_;
-  // void            callback_gazebo_pendulum(const gazebo_msgs::LinkStates& msg);
-
-
   // | --------------------- timer callbacks -------------------- |
-  // ros::Publisher pub_quad_state_;
-  // ros::Publisher pub_desired_quad_state_;
-  // ros::Publisher pub_cable_state_;
-  // ros::Publisher pub_desired_cable_state_;
+
+  // | ---------------------- msg callbacks --------------------- |
+  mrs_lib::SubscribeHandler<nav_msgs::Odometry>                  sh_cable_states;
+  void              callback_cable_states(const nav_msgs::Odometry::ConstPtr msg);
 
 };
 
@@ -342,38 +336,7 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   param_loader.loadParam("kq_2_dot_value",  kq_2_dot); 
   param_loader.loadParam("kq_3_dot_value",  kq_3_dot);
 
-  // | ----------------------- subscribers ---------------------- |
-  // ros::Subscriber sh_quad_state;
-  // sh_quad_state = nh_.subscribe("/multirotor_simulator/uav1/odom", 1, &ExampleController::callback_quad_state, this, ros::TransportHints().tcpNoDelay());
-
-  // ros::Subscriber sh_user_reference;
-  // sh_user_reference = nh_.subscribe("/uav1/control_manager/control_reference", 1, &ExampleController::callback_user_reference, this, ros::TransportHints().tcpNoDelay());
-
-  // ros::Subscriber sh_cable_states;
-  // sh_cable_states = nh_.subscribe("/multirotor_simulator/uav1/cable_state", 1, &ExampleController::callback_cable_states, this, ros::TransportHints().tcpNoDelay());
-
-  // | ----------------------- subscribers ---------------------- |
-  // | ----------------------- subscribers ---------------------- |
-
-  mrs_lib::SubscribeHandlerOptions shopts;
-  shopts.nh                 = nh;
-  shopts.node_name          = "uav1";
-  shopts.no_message_timeout = mrs_lib::no_timeout;
-  shopts.threadsafe         = true;
-  shopts.autostart          = true;
-  shopts.queue_size         = 10;
-  shopts.transport_hints    = ros::TransportHints().tcpNoDelay();
-
-  mrs_lib::SubscribeHandler<nav_msgs::Odometry>            sh_cable_states;
-
-  sh_cable_states = mrs_lib::SubscribeHandler<nav_msgs::Odometry>(shopts, "/multirotor_simulator/uav1/cable_state", &ExampleController::callback_cable_states, this);
-
   // | -------- initialize a publisher -------- |
-
-  // pub_quad_state_           = nh_.advertise<geometry_msgs::Pose>("quad_state_custom",           1000);
-  // pub_desired_quad_state_   = nh_.advertise<geometry_msgs::Pose>("desired_quad_state_custom",   1000);
-  // pub_cable_state_          = nh_.advertise<geometry_msgs::Pose>("cable_state_custom",          1000);
-  // pub_desired_cable_state_  = nh_.advertise<geometry_msgs::Pose>("desired_cable_state_custom",  1000);
 
   // | ------------------ finish loading params ----------------- |
 
@@ -388,6 +351,20 @@ bool ExampleController::initialize(const ros::NodeHandle& nh, std::shared_ptr<mr
   drs_->updateConfig(drs_params_);
   Drs_t::CallbackType f = boost::bind(&ExampleController::callbackDrs, this, _1, _2);
   drs_->setCallback(f);
+
+  // | ------------------ initialize subscribers ----------------- |
+
+  mrs_lib::SubscribeHandlerOptions shopts;
+  shopts.nh                 = nh;
+  shopts.node_name          = "ExampleController";
+  shopts.no_message_timeout = ros::Duration(1.0);
+  shopts.threadsafe         = true;
+  shopts.autostart          = true;
+  shopts.queue_size         = 10;
+  shopts.transport_hints    = ros::TransportHints().tcpNoDelay();
+
+  sh_cable_states           = mrs_lib::SubscribeHandler<nav_msgs::Odometry>(shopts, "/multirotor_simulator/uav1/cable_state",
+                                                                                            &ExampleController::callback_cable_states, this);
 
   // | ----------------------- finish init ---------------------- |
 
@@ -769,8 +746,6 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
   // ROS_INFO_STREAM_THROTTLE(1, "[ExampleController]: cable Attitude" << uav_state.cable);
   // MultirotorModel::State &state;
 
-
-
   // | ---------------- Get the gains values --------------- |
 
   kx      << kx_1 ,     kx_2 ,    kx_3;
@@ -809,7 +784,11 @@ ExampleController::ControlOutput ExampleController::updateActive(const mrs_msgs:
 
   u_quad_input      = position_feedback + velocity_feedback + feed_forward;
 
+  // | ---------------- Get Desired Cable Attitude
+  // q_d               = -u_quad_input.normalized();
+
   // | ---------------- prepare the cable attitude control output --------------- |
+  
   e_q               = q.cross(q.cross(q_d));
   e_q_dot           = q_dot - (q_d.cross(q_d_dot)).cross(q);
   u_cable_input     = kq * e_q.array()  + kq_dot * e_q_dot.array();
@@ -1014,25 +993,25 @@ const mrs_msgs::DynamicsConstraintsSrvResponse::ConstPtr ExampleController::setC
 
 // }
 
-void ExampleController::callback_cable_states(const nav_msgs::Odometry& msg) {
-  
-  q(0)      = msg.pose.pose.position.x;
-  q(1)      = msg.pose.pose.position.y;
-  q(2)      = msg.pose.pose.position.z;
 
-  q_dot(0)  = msg.twist.twist.linear.x;
-  q_dot(1)  = msg.twist.twist.linear.y;
-  q_dot(2)  = msg.twist.twist.linear.z;
-
-  ROS_INFO("q1: %2.2f, q2: %2.2f, q3: %2.2f", q(0), q(1), q(2));
-
-}
 
 void ExampleController::callbackDrs(example_controller_plugin::example_controllerConfig& config, [[maybe_unused]] uint32_t level) {
 
   mrs_lib::set_mutexed(mutex_drs_params_, config, drs_params_);
 
   ROS_INFO("[ExampleController]: dynamic reconfigure params updated");
+}
+
+void ExampleController::callback_cable_states(const nav_msgs::Odometry::ConstPtr msg) {
+
+  q[0] = msg->pose.pose.position.x;
+  q[1] = msg->pose.pose.position.y;
+  q[2] = msg->pose.pose.position.z;
+
+  q_dot[0] = msg->twist.twist.linear.x;
+  q_dot[1] = msg->twist.twist.linear.y;
+  q_dot[2] = msg->twist.twist.linear.z;
+
 }
 
 float ExampleController::min_acc_first_coefficient(float t1, float t2, float st, float en){
